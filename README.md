@@ -1,3 +1,5 @@
+<p align="center"><img src="https://raw.githubusercontent.com/SebastianKristo/ki-vanning/main/brand/logo.svg" width="110"></p>
+
 # KI Vanning
 
 Forbruk, kostnad og estimat for OpenSprinkler – som en egen integrasjon i stedet for en haug med
@@ -6,18 +8,18 @@ OpenSprinkler-integrasjonen.
 
 ## Hva den gjør
 
-- **Fordeler vannet.** Flowen fra måleren tilskrives den sonen som kjører akkurat nå. Går det vann uten at
+- <img src="https://raw.githubusercontent.com/SebastianKristo/ki-vanning/main/brand/forbruk.svg" width="22" align="absmiddle"> **Fordeler vannet.** Flowen fra måleren tilskrives den sonen som kjører akkurat nå. Går det vann uten at
   en sone er i gang, føres det på **hageslangen**.
-- **Fører forbruk** per sone: totalt, i dag, denne uken, denne måneden og i år – i liter og kroner.
-- **Kalibrerer seg selv.** Kjøretiden per sone måles, og L/min regnes ut som faktisk forbruk delt på faktisk
+- <img src="https://raw.githubusercontent.com/SebastianKristo/ki-vanning/main/brand/soner.svg" width="22" align="absmiddle"> **Fører forbruk** per sone: totalt, i dag, denne uken, denne måneden og i år – i liter og kroner.
+- <img src="https://raw.githubusercontent.com/SebastianKristo/ki-vanning/main/brand/kostnad.svg" width="22" align="absmiddle"> **Kalibrerer seg selv.** Kjøretiden per sone måles, og L/min regnes ut som faktisk forbruk delt på faktisk
   kjøretid. Sonen som aldri har kjørt bruker målt flow eller 8 L/min.
-- **Leser programplanen** fra OpenSprinkler-integrasjonen selv: kalenderen `calendar.opensprinkler_schedule`
+- <img src="https://raw.githubusercontent.com/SebastianKristo/ki-vanning/main/brand/plan.svg" width="22" align="absmiddle"> **Leser programplanen** fra OpenSprinkler-integrasjonen selv: kalenderen `calendar.opensprinkler_schedule`
   gir kommende kjøringer, og programmenes egne entiteter gir navn, starttid og – der integrasjonen oppgir dem –
   minutter per sone. Ut av det kommer planlagt i dag, neste vanning og hva det kommer til å koste, kalibrert
   per sone. Ingen API-adresse eller passord er nødvendig.
-- **Lærer av programmene.** Hver gang et program kjører, måles hvor mye vann det faktisk brukte. Kjenner vi
+- <img src="https://raw.githubusercontent.com/SebastianKristo/ki-vanning/main/brand/plan.svg" width="22" align="absmiddle"> **Lærer av programmene.** Hver gang et program kjører, måles hvor mye vann det faktisk brukte. Kjenner vi
   ikke minuttene per sone, brukes snittet fra tidligere kjøringer som estimat.
-- **Siste kjøring** per sone: liter, minutter og når den ble ferdig.
+- <img src="https://raw.githubusercontent.com/SebastianKristo/ki-vanning/main/brand/hageslange.svg" width="22" align="absmiddle"> **Siste kjøring** per sone: liter, minutter og når den ble ferdig.
 
 Alt ligger på én enhet, og `sensor.<navn>_oversikt` har hele oppsettet som attributter, slik at
 `ki-vanning-card` kan tegne kortet uten at du lister opp entiteter.
@@ -57,3 +59,17 @@ Per sone (og for hageslangen): `forbruk`, `forbruk i dag / uken / måneden / år
 
 Pakkene `vanning_komplett.yaml`, `vanning_plan.yaml`, `vann_kostnad.yaml`, `vann_kjoretid.yaml`,
 `vann_hageslange.yaml`, `vann_estimat.yaml` og `forbruk_per_sone_i_dag.yaml`.
+
+## Ikoner
+
+| | |
+|---|---|
+| <img src="https://raw.githubusercontent.com/SebastianKristo/ki-vanning/main/brand/logo.svg" width="34"> | Integrasjonen – spreder med vann |
+| <img src="https://raw.githubusercontent.com/SebastianKristo/ki-vanning/main/brand/soner.svg" width="34"> | Soner |
+| <img src="https://raw.githubusercontent.com/SebastianKristo/ki-vanning/main/brand/forbruk.svg" width="34"> | Forbruk i liter |
+| <img src="https://raw.githubusercontent.com/SebastianKristo/ki-vanning/main/brand/kostnad.svg" width="34"> | Kostnad og kalibrering |
+| <img src="https://raw.githubusercontent.com/SebastianKristo/ki-vanning/main/brand/plan.svg" width="34"> | Programplan og neste vanning |
+| <img src="https://raw.githubusercontent.com/SebastianKristo/ki-vanning/main/brand/hageslange.svg" width="34"> | Hageslangen |
+
+Ikonene ligger i `brand/` som SVG og PNG (256 px). `brand/logo.png` passer som *Social preview* i
+repo-innstillingene.
