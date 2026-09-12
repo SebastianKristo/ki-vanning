@@ -53,32 +53,49 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             if m.plan:
                 await m.slett_program(call.data.get("navn"))
 
-    async def sett_ferie(call: ServiceCall) -> None:
+    async def sett_regnpause(call: ServiceCall) -> None:
+        """Setter eller fjerner regnpause, i timer."""
         for m in list(hass.data[DOMAIN].values()):
-            m.sett_ferie(bool(call.data.get("pa", True)))
+            m.sett_regnpause(float(call.data.get("timer") or 0))
+
+    async def nullstill_regnpause(_call: ServiceCall) -> None:
+        for m in list(hass.data[DOMAIN].values()):
+            m.sett_regnpause(0)
+
+    async def sett_anlegg(call: ServiceCall) -> None:
+        for m in list(hass.data[DOMAIN].values()):
+            m.sett_anlegg(bool(call.data.get("pa", True)))
 
     hass.services.async_register(DOMAIN, "nullstill", nullstill)
     hass.services.async_register(DOMAIN, "hent_plan", hent_plan)
     hass.services.async_register(DOMAIN, "kjor", kjor)
     hass.services.async_register(DOMAIN, "kjor_program", kjor_program)
     hass.services.async_register(DOMAIN, "stopp", stopp)
-    hass.services.async_register(DOMAIN, "sett_ferie", sett_ferie)
+    hass.services.async_register(DOMAIN, "sett_regnpause", sett_regnpause)
+    hass.services.async_register(DOMAIN, "nullstill_regnpause", nullstill_regnpause)
+    hass.services.async_register(DOMAIN, "sett_anlegg", sett_anlegg)
     hass.services.async_register(DOMAIN, "lag_program", lag_program)
     hass.services.async_register(DOMAIN, "slett_program", slett_program)
     return True
 
 
-MYKE_FELT = {"programmer", "ferie", "ferie_faktor", "pris"}
+MYKE_FELT = {"programmer", "anlegg"}
 
 
 async def _oppdater(hass: HomeAssistant, entry: ConfigEntry) -> None:
-    """Endringer i programmer, ferie og pris tas rett inn i motoren.
+    """Endringer i programmer og hovedbryter tas rett inn i motoren.
     Bare endringer i oppsettet ellers krever full omstart av integrasjonen."""
     motor = hass.data.get(DOMAIN, {}).get(entry.entry_id)
     if motor is not None:
         nye = {**entry.data, **entry.options}
         endret = {k for k in set(nye) | set(motor.oppsett) if nye.get(k) != motor.oppsett.get(k)}
-        if endret and endret <= MYKE_FELT:
+        if not endret:
+            # Motoren har allerede skrevet endringen selv – da er det ikke noe
+            # å laste inn på nytt. Uten dette ble hele integrasjonen startet om
+            # hver gang et program ble slått av eller på.
+            motor._varsle()
+            return
+        if endret <= MYKE_FELT:
             motor.oppsett.update(nye)
             if motor.plan:
                 motor.plan.les_programmer()

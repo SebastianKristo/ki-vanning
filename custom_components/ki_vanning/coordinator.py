@@ -310,7 +310,7 @@ class KiVanningMotor:
             "soner": data.get("soner") or [],
             "samtidig": bool(data.get("samtidig")),
             "aktiv": data.get("aktiv") if data.get("aktiv") is not None else True,
-            "ferie": bool(data.get("ferie")),
+
         }
         if isinstance(rad["dager"], str):
             rad["dager"] = [d.strip() for d in rad["dager"].split(",") if d.strip()]
@@ -340,11 +340,19 @@ class KiVanningMotor:
         await self._hent_plan(None)
         self._varsle()
 
-    def sett_ferie(self, pa: bool) -> None:
-        self.oppsett["ferie"] = bool(pa)
-        if self.plan:
-            self.plan.ferie = bool(pa)
+    def sett_anlegg(self, pa: bool) -> None:
+        """Hovedbryter: av stopper alt og hindrer at programmene starter."""
+        self.oppsett["anlegg"] = bool(pa)
+        entry = getattr(self, "entry", None)
+        if entry is not None:
+            self.hass.config_entries.async_update_entry(entry, options={**entry.options, "anlegg": bool(pa)})
+        if not pa and self.plan:
+            self.hass.async_create_task(self.plan.stopp_alt())
         self._varsle()
+
+    def sett_regnpause(self, timer: float) -> None:
+        if self.plan:
+            self.plan.sett_regnpause(timer)
 
     def _flow(self, sone: "Sone | None" = None) -> float:
         """Flow i L/min: sonens egen måler hvis den har en, ellers den felles."""

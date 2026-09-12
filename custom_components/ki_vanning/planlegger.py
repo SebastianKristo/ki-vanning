@@ -1,7 +1,7 @@
-"""Planlegger for egne ventiler – uker, ferie og manuell kjøring.
+"""Planlegger for egne ventiler – uker, regnpause og manuell kjøring.
 
 Brukes når man ikke har OpenSprinkler: sonene er vanlige brytere (for eksempel
-Sonoff-ventiler), og denne modulen står for køen, klokka og ferieuka.
+Sonoff-ventiler), og denne modulen står for køen, klokka og regnpausen.
 """
 from __future__ import annotations
 
@@ -44,7 +44,7 @@ class Program:
     soner: list[dict[str, Any]] = field(default_factory=list)   # [{entity, min}]
     samtidig: bool = False              # true: alle sonene åpnes samtidig
     aktiv: bool = True
-    ferie: bool = False                 # kjøres bare når feriemodus er på
+
 
     @property
     def total_min(self) -> float:
@@ -62,10 +62,9 @@ class Program:
         except ValueError:
             return None
 
-    def gjelder(self, nå: datetime, ferie: bool) -> bool:
+    def gjelder(self, nå: datetime) -> bool:
         if not self.aktiv:
             return False
-        if self.ferie and not ferie:
             return False
         if self.intervall and self.intervall > 0:
             anker = self._anker()
@@ -78,7 +77,7 @@ class Program:
     def som_dict(self) -> dict[str, Any]:
         return {"navn": self.navn, "tid": self.tid, "dager": self.dager, "intervall": self.intervall,
                 "start_dato": self.start_dato, "soner": self.soner, "samtidig": self.samtidig,
-                "aktiv": self.aktiv, "ferie": self.ferie, "total_min": self.total_min}
+                "aktiv": self.aktiv, "total_min": self.total_min}
 
 
 class Planlegger:
@@ -90,7 +89,7 @@ class Planlegger:
         self.koe: list[Koe] = []
         self.naa: Koe | None = None
         self.programmer: list[Program] = []
-        self.ferie = False
+        self.regnpause_til: datetime | None = None
         self._av: list[Any] = []
         self._timer = None
 
@@ -110,15 +109,39 @@ class Planlegger:
     def les_programmer(self) -> None:
         rå = self.motor.oppsett.get("programmer") or []
         self.programmer = [Program(**{**{"navn": "Program"}, **p}) for p in rå]
-        self.ferie = bool(self.motor.oppsett.get("ferie"))
+
+    # ------------------------------------------------------------- regnpause
+    @property
+    def regnpause_aktiv(self) -> bool:
+        return bool(self.regnpause_til and dt_util.utcnow() < self.regnpause_til)
+
+    @property
+    def regnpause_minutter(self) -> int:
+        if not self.regnpause_aktiv:
+            return 0
+        return max(0, int((self.regnpause_til - dt_util.utcnow()).total_seconds() // 60))
+
+    def sett_regnpause(self, timer: float) -> None:
+        """Setter pause i så mange timer. 0 fjerner den."""
+        if timer and float(timer) > 0:
+            self.regnpause_til = dt_util.utcnow() + timedelta(hours=float(timer))
+        else:
+            self.regnpause_til = None
+        self.motor._varsle()
+
+    @property
+    def anlegg_pa(self) -> bool:
+        return self.motor.oppsett.get("anlegg", True) is not False
 
     # ------------------------------------------------------------------ klokke
     @callback
     def _minutt(self, nå: datetime) -> None:
+        if not self.anlegg_pa or self.regnpause_aktiv:
+            return                       # anlegget er av, eller det er regnpause
         lokal = dt_util.as_local(nå)
         klokke = lokal.strftime("%H:%M")
         for p in self.programmer:
-            if p.tid == klokke and p.gjelder(lokal, self.ferie):
+            if p.tid == klokke and p.gjelder(lokal):
                 self.hass.async_create_task(self.kjor_program(p.navn))
 
     # ------------------------------------------------------------------ kjøring
@@ -127,7 +150,7 @@ class Planlegger:
         if not p:
             _LOGGER.warning("KI Vanning: fant ikke programmet %s", navn)
             return
-        faktor = float(self.motor.oppsett.get("ferie_faktor") or 1) if self.ferie else 1.0
+        faktor = 1.0
         jobber = []
         for z in p.soner:
             sone = self.motor.sone_for(z.get("entity"))
@@ -233,18 +256,19 @@ class Planlegger:
             "i_koe": [{"sone": k.navn, "minutter": k.minutter, "program": k.program} for k in self.koe],
             "samtidig": [{"sone": j.navn, "slutt": j.slutt.isoformat() if j.slutt else None}
                          for j in getattr(self, "parallelle", [])],
-            "ferie": self.ferie,
+            "regnpause_til": self.regnpause_til.isoformat() if self.regnpause_til else None,
+            "regnpause": self.regnpause_aktiv,
         }
 
     def planlagt(self, dager: int = 8) -> list[dict[str, Any]]:
         """Kommende kjøringer, brukt til «planlagt i dag» og «neste vanning»."""
         nå = dt_util.now()
         ut: list[dict[str, Any]] = []
-        faktor = float(self.motor.oppsett.get("ferie_faktor") or 1) if self.ferie else 1.0
+        faktor = 1.0
         for d in range(dager):
             dag = nå + timedelta(days=d)
             for p in self.programmer:
-                if not p.gjelder(dag, self.ferie):
+                if not p.gjelder(dag):
                     continue
                 try:
                     t, m = [int(x) for x in str(p.tid).split(":")[:2]]
@@ -265,7 +289,7 @@ class Planlegger:
                     "total_min": round(max([z["min"] for z in soner] or [0]) if p.samtidig
                                        else sum(z["min"] for z in soner)),
                     "samtidig": p.samtidig, "intervall": p.intervall,
-                    "estimat_liter": round(liter), "kilde": "planlegger", "ferie": p.ferie,
+                    "estimat_liter": round(liter), "kilde": "planlegger",
                 })
         ut.sort(key=lambda x: x["minutter_til"])
         return ut

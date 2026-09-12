@@ -13,14 +13,13 @@ CONF_PRIS = "pris"                # kr per m³
 CONF_MIN_FLOW = "min_flow"        # under denne regnes flow som null (L/min)
 CONF_MODUS = "modus"              # opensprinkler | ventiler
 CONF_SONER = "soner"              # egne ventiler: [{entity, navn, ikon}]
-CONF_PROGRAMMER = "programmer"    # [{navn, dager, tid, soner:[{entity,min}], aktiv, ferie}]
-CONF_FERIE = "ferie"              # ferie-modus av/på
-CONF_FERIE_FAKTOR = "ferie_faktor"  # ganger vanningstiden i ferie
+CONF_PROGRAMMER = "programmer"    # [{navn, dager, tid, soner:[{entity,min}], aktiv}]
+CONF_ANLEGG = "anlegg"            # hovedbryter: av stopper alt
+CONF_REGNPAUSE = "regnpause"      # timer med pause
 
 MODUS_OS = "opensprinkler"
 MODUS_VENTILER = "ventiler"
 
-STD_FERIE_FAKTOR = 1.3
 MAKS_MINUTTER = 180               # sikkerhetsgrense for én kjøring
 UKEDAGER = ["man", "tir", "ons", "tor", "fre", "lor", "son"]
 

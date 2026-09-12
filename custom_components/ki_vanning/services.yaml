@@ -39,15 +39,6 @@ stopp:
   name: Stopp all vanning
   description: Tømmer køen og slår av ventilene.
 
-sett_ferie:
-  name: Feriemodus
-  description: Slår feriemodus av eller på.
-  fields:
-    pa:
-      name: På
-      default: true
-      selector: { boolean: }
-
 lag_program:
   name: Lag eller endre program
   description: Lager et vanningsprogram, eller oppdaterer et som har samme navn.
@@ -96,3 +87,25 @@ slett_program:
       name: Navn
       required: true
       selector: { text: }
+
+sett_regnpause:
+  name: Sett regnpause
+  description: Stopper programmene i et gitt antall timer. 0 fjerner pausen.
+  fields:
+    timer:
+      name: Timer
+      required: true
+      example: 24
+      selector: { number: { min: 0, max: 168, step: 1, mode: box, unit_of_measurement: t } }
+
+nullstill_regnpause:
+  name: Nullstill regnpause
+  description: Fjerner regnpausen med en gang.
+
+sett_anlegg:
+  name: Slå anlegget av eller på
+  description: Av stopper det som går, og hindrer at programmene starter.
+  fields:
+    pa:
+      name: På
+      selector: { boolean: }

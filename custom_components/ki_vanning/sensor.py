@@ -341,12 +341,17 @@ class Oversikt(KiVanningEntitet, SensorEntity):
         e = m.estimat_i_dag()
         return {
             ATTR_INTEGRASJON: DOMAIN, ATTR_TYPE: "oversikt",
-            "modus": m.modus, "prefiks": m.oppsett.get("prefiks") or "", "pris_m3": m.pris(),
-            **({"planlegger": m.plan.status(), "ferie": bool(m.oppsett.get("ferie")),
-                "ferie_faktor": m.oppsett.get("ferie_faktor")} if m.plan else {}),
+            "modus": m.modus, "prefiks": m.oppsett.get("prefiks") or "",
+            **({"planlegger": m.plan.status(),
+                "anlegg": m.oppsett.get("anlegg", True) is not False,
+                "regnpause": m.plan.regnpause_aktiv,
+                "regnpause_minutter": m.plan.regnpause_minutter,
+                "regnpause_til": m.plan.regnpause_til.isoformat() if m.plan.regnpause_til else None}
+               if m.plan else {}),
             "i_dag": m.total("liter", "i_dag"), "uke": m.total("liter", "uke"),
             "maaned": m.total("liter", "maaned"), "aar": m.total("liter", "aar"),
-            "totalt": m.total("liter"), "kostnad_i_dag": m.kostnad(m.total("liter", "i_dag")),
+            "totalt": m.total("liter"),
+            **({"pris_m3": m.pris(), "kostnad_i_dag": m.kostnad(m.total("liter", "i_dag"))} if m.pris() else {}),
             "estimat_i_dag": e["liter"], "estimat_kostnad": e["kostnad"],
             "neste": m.neste, "programmer": m.planlagt, "program_historikk": m.programliste(),
             "soner": [

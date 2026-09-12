@@ -1,4 +1,4 @@
-"""Knapper for å nullstille tellerne og hente programplanen."""
+"""Knapper: stopp alt, regnpause, nullstilling og programplan."""
 from __future__ import annotations
 
 from homeassistant.components.button import ButtonEntity
@@ -12,10 +12,13 @@ from .entity import KiVanningEntitet
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, add: AddEntitiesCallback) -> None:
     motor = hass.data[DOMAIN][entry.entry_id]
-    add([Nullstill(motor, "alt", "Nullstill alt"),
-         Nullstill(motor, "forbruk", "Nullstill forbruk"),
-         Nullstill(motor, "kalibrering", "Nullstill kalibrering"),
-         HentPlan(motor)])
+    ut = [Nullstill(motor, "alt", "Nullstill alt"),
+          Nullstill(motor, "forbruk", "Nullstill forbruk"),
+          Nullstill(motor, "kalibrering", "Nullstill kalibrering"),
+          HentPlan(motor)]
+    if motor.plan:
+        ut += [StoppAlt(motor), Regn(motor, 24), Regn(motor, 48), NullstillRegn(motor)]
+    add(ut)
 
 
 class Nullstill(KiVanningEntitet, ButtonEntity):
@@ -45,3 +48,57 @@ class HentPlan(KiVanningEntitet, ButtonEntity):
 
     async def async_press(self) -> None:
         await self.motor._hent_plan(None)
+
+
+class StoppAlt(KiVanningEntitet, ButtonEntity):
+    """Stopper det som går nå, og tømmer køen."""
+
+    _attr_icon = "mdi:stop"
+
+    def __init__(self, motor) -> None:
+        super().__init__(motor, "stopp_alt", "Stopp alt")
+
+    @property
+    def extra_state_attributes(self) -> dict:
+        plan = self.motor.plan
+        return {ATTR_INTEGRASJON: DOMAIN, ATTR_TYPE: "stopp_alt",
+                "gaar": bool(plan and plan.naa), "i_koe": len(plan.koe) if plan else 0}
+
+    async def async_press(self) -> None:
+        if self.motor.plan:
+            await self.motor.plan.stopp_alt()
+
+
+class Regn(KiVanningEntitet, ButtonEntity):
+    """Setter regnpause i et gitt antall timer."""
+
+    _attr_icon = "mdi:weather-pouring"
+
+    def __init__(self, motor, timer: int) -> None:
+        super().__init__(motor, f"regn_{timer}t", f"Regnpause {timer} t")
+        self.timer = timer
+
+    @property
+    def extra_state_attributes(self) -> dict:
+        return {ATTR_INTEGRASJON: DOMAIN, ATTR_TYPE: "regnpause_sett", "timer": self.timer}
+
+    async def async_press(self) -> None:
+        self.motor.sett_regnpause(self.timer)
+
+
+class NullstillRegn(KiVanningEntitet, ButtonEntity):
+    """Fjerner regnpausen, slik at programmene går som vanlig igjen."""
+
+    _attr_icon = "mdi:weather-sunny"
+
+    def __init__(self, motor) -> None:
+        super().__init__(motor, "nullstill_regnpause", "Nullstill regnpause")
+
+    @property
+    def extra_state_attributes(self) -> dict:
+        plan = self.motor.plan
+        return {ATTR_INTEGRASJON: DOMAIN, ATTR_TYPE: "regnpause_nullstill",
+                "aktiv": bool(plan and plan.regnpause_aktiv)}
+
+    async def async_press(self) -> None:
+        self.motor.sett_regnpause(0)

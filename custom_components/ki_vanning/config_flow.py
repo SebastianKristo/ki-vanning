@@ -11,14 +11,12 @@ from homeassistant.core import callback
 from homeassistant.helpers import selector
 
 from .const import (
-    CONF_FERIE_FAKTOR,
     CONF_FLOW,
     CONF_MODUS,
     CONF_PROGRAMMER,
     CONF_SONER,
     MODUS_OS,
     MODUS_VENTILER,
-    STD_FERIE_FAKTOR,
     UKEDAGER,
     CONF_HOST,
     CONF_MIN_FLOW,
@@ -100,7 +98,6 @@ class KiVanningFlow(config_entries.ConfigFlow, domain=DOMAIN):
             vol.Optional(CONF_FLOW, default=_finn_flow(self.hass) or ""): selector.EntitySelector(
                 selector.EntitySelectorConfig(domain="sensor")),
             vol.Optional(CONF_PRIS, default=STD_PRIS): vol.Coerce(float),
-            vol.Optional(CONF_FERIE_FAKTOR, default=STD_FERIE_FAKTOR): vol.Coerce(float),
         })
         return self.async_show_form(step_id="ventiler", data_schema=skjema)
 
@@ -219,7 +216,6 @@ class KiVanningOptions(config_entries.OptionsFlow):
                 "start_dato": str(user_input.get("start_dato") or ""),
                 "soner": _tolk_soner(user_input.get("soner"), {"_minutter": user_input.get("minutter")}),
                 "samtidig": bool(user_input.get("samtidig")),
-                "ferie": bool(user_input.get("ferie")),
                 "aktiv": bool(user_input.get("aktiv", True)),
             }
             liste = [p for p in liste if p.get("navn") not in (self._valgt, rad["navn"])]
@@ -242,7 +238,6 @@ class KiVanningOptions(config_entries.OptionsFlow):
                 selector.SelectSelectorConfig(options=valg, multiple=True, mode="list")),
             vol.Optional("minutter", default=str(", ".join(f"{k}:{v}" for k, v in gamle_soner.items()) or "")): str,
             vol.Optional("samtidig", default=gammel.get("samtidig", False)): bool,
-            vol.Optional("ferie", default=gammel.get("ferie", False)): bool,
             vol.Optional("aktiv", default=gammel.get("aktiv", True)): bool,
             **({vol.Optional("slett", default=False): bool} if not nytt else {}),
         })
