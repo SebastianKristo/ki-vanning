@@ -33,29 +33,51 @@ class Koe:
 
 @dataclass
 class Program:
-    """Et ukeprogram, eventuelt bare for ferie."""
+    """Et program: enten faste ukedager eller et intervall, og sonene i rekkefølge
+    eller samtidig."""
 
     navn: str
     tid: str = "06:00"
     dager: list[str] = field(default_factory=lambda: list(UKEDAGER))
+    intervall: int = 0                  # 0 = bruk ukedager, ellers hver N. dag
+    start_dato: str = ""                # ankerdato for intervallet (YYYY-MM-DD)
     soner: list[dict[str, Any]] = field(default_factory=list)   # [{entity, min}]
+    samtidig: bool = False              # true: alle sonene åpnes samtidig
     aktiv: bool = True
-    ferie: bool = False            # kjøres bare når feriemodus er på
-    kun_hverdag: bool = False
+    ferie: bool = False                 # kjøres bare når feriemodus er på
 
     @property
     def total_min(self) -> float:
-        return sum(float(z.get("min") or 0) for z in self.soner)
+        """Sekvensielt er det summen, samtidig er det den lengste sonen."""
+        tider = [float(z.get("min") or 0) for z in self.soner]
+        if not tider:
+            return 0
+        return max(tider) if self.samtidig else sum(tider)
+
+    def _anker(self) -> datetime | None:
+        if not self.start_dato:
+            return None
+        try:
+            return datetime.strptime(str(self.start_dato)[:10], "%Y-%m-%d")
+        except ValueError:
+            return None
 
     def gjelder(self, nå: datetime, ferie: bool) -> bool:
         if not self.aktiv:
             return False
         if self.ferie and not ferie:
             return False
+        if self.intervall and self.intervall > 0:
+            anker = self._anker()
+            if anker is None:
+                return True                      # uten ankerdato: hver dag til den settes
+            dager = (nå.date() - anker.date()).days
+            return dager >= 0 and dager % int(self.intervall) == 0
         return UKEDAGER[nå.weekday()] in self.dager
 
     def som_dict(self) -> dict[str, Any]:
-        return {"navn": self.navn, "tid": self.tid, "dager": self.dager, "soner": self.soner,
+        return {"navn": self.navn, "tid": self.tid, "dager": self.dager, "intervall": self.intervall,
+                "start_dato": self.start_dato, "soner": self.soner, "samtidig": self.samtidig,
                 "aktiv": self.aktiv, "ferie": self.ferie, "total_min": self.total_min}
 
 
@@ -106,14 +128,47 @@ class Planlegger:
             _LOGGER.warning("KI Vanning: fant ikke programmet %s", navn)
             return
         faktor = float(self.motor.oppsett.get("ferie_faktor") or 1) if self.ferie else 1.0
+        jobber = []
         for z in p.soner:
             sone = self.motor.sone_for(z.get("entity"))
             if not sone:
                 continue
-            self.koe.append(Koe(entity=sone.bryter, navn=sone.navn,
-                                minutter=min(MAKS_MINUTTER, float(z.get("min") or 0) * faktor),
-                                program=p.navn))
+            jobber.append(Koe(entity=sone.bryter, navn=sone.navn,
+                              minutter=min(MAKS_MINUTTER, float(z.get("min") or 0) * faktor),
+                              program=p.navn))
+        if not jobber:
+            return
+        if p.samtidig:
+            await self._kjor_samtidig(jobber)
+            return
+        self.koe.extend(jobber)
         await self._neste()
+
+    async def _kjor_samtidig(self, jobber: list[Koe]) -> None:
+        """Alle sonene åpnes med én gang, og hver stenges når sin egen tid er ute."""
+        nå = dt_util.now()
+        self.parallelle = getattr(self, "parallelle", [])
+        for j in jobber:
+            j.start = nå
+            j.slutt = nå + timedelta(minutes=j.minutter)
+            self.parallelle.append(j)
+            await self.hass.services.async_call("homeassistant", "turn_on", {"entity_id": j.entity}, blocking=False)
+            async_track_point_in_time(self.hass, self._stopp_en(j), dt_util.as_utc(j.slutt))
+        self.naa = max(jobber, key=lambda x: x.slutt)      # heroen viser den som varer lengst
+        self.motor._varsle()
+
+    def _stopp_en(self, jobb: Koe):
+        @callback
+        def _av(_nå):
+            self.hass.async_create_task(self._avslutt_en(jobb))
+        return _av
+
+    async def _avslutt_en(self, jobb: Koe) -> None:
+        await self._slaa_av(jobb.entity)
+        self.parallelle = [j for j in getattr(self, "parallelle", []) if j is not jobb]
+        if self.naa is jobb:
+            self.naa = (self.parallelle or [None])[0]
+        self.motor._varsle()
 
     async def kjor_sone(self, entity: str, minutter: float) -> None:
         sone = self.motor.sone_for(entity)
@@ -124,6 +179,9 @@ class Planlegger:
 
     async def stopp_alt(self) -> None:
         self.koe.clear()
+        for j in list(getattr(self, "parallelle", [])):
+            await self._slaa_av(j.entity)
+        self.parallelle = []
         if self._timer:
             self._timer()
             self._timer = None
@@ -173,6 +231,8 @@ class Planlegger:
             "slutt": n.slutt.isoformat() if n and n.slutt else None,
             "sekunder_igjen": int((n.slutt - dt_util.now()).total_seconds()) if n and n.slutt else 0,
             "i_koe": [{"sone": k.navn, "minutter": k.minutter, "program": k.program} for k in self.koe],
+            "samtidig": [{"sone": j.navn, "slutt": j.slutt.isoformat() if j.slutt else None}
+                         for j in getattr(self, "parallelle", [])],
             "ferie": self.ferie,
         }
 
@@ -202,7 +262,9 @@ class Planlegger:
                     "navn": p.navn, "tid": start.strftime("%H:%M"), "start": start.isoformat(),
                     "minutter_til": int((start - nå).total_seconds() // 60),
                     "i_dag": start.date() == nå.date(), "soner": soner,
-                    "total_min": round(sum(z["min"] for z in soner)),
+                    "total_min": round(max([z["min"] for z in soner] or [0]) if p.samtidig
+                                       else sum(z["min"] for z in soner)),
+                    "samtidig": p.samtidig, "intervall": p.intervall,
                     "estimat_liter": round(liter), "kilde": "planlegger", "ferie": p.ferie,
                 })
         ut.sort(key=lambda x: x["minutter_til"])

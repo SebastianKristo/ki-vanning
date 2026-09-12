@@ -47,3 +47,52 @@ sett_ferie:
       name: På
       default: true
       selector: { boolean: }
+
+lag_program:
+  name: Lag eller endre program
+  description: Lager et vanningsprogram, eller oppdaterer et som har samme navn.
+  fields:
+    navn:
+      name: Navn
+      required: true
+      selector: { text: }
+    tid:
+      name: Klokkeslett
+      default: "06:00"
+      selector: { time: }
+    dager:
+      name: Ukedager
+      description: man, tir, ons, tor, fre, lor, son – tomt hvis du bruker intervall
+      selector: { select: { multiple: true, options: [man, tir, ons, tor, fre, lor, son] } }
+    intervall:
+      name: Hver N. dag
+      description: 0 = bruk ukedager i stedet
+      default: 0
+      selector: { number: { min: 0, max: 30, mode: box } }
+    start_dato:
+      name: Startdato for intervallet
+      selector: { date: }
+    soner:
+      name: Soner
+      description: "Liste med {entity, min}, eller «switch.x:10, switch.y:5»"
+      selector: { object: }
+    samtidig:
+      name: Kjør sonene samtidig
+      default: false
+      selector: { boolean: }
+    ferie:
+      name: Bare i feriemodus
+      default: false
+      selector: { boolean: }
+    aktiv:
+      name: Aktivt
+      default: true
+      selector: { boolean: }
+
+slett_program:
+  name: Slett program
+  fields:
+    navn:
+      name: Navn
+      required: true
+      selector: { text: }

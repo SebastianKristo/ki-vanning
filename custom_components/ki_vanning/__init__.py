@@ -11,6 +11,7 @@ from .coordinator import KiVanningMotor
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     oppsett = {**entry.data, **entry.options}
     motor = KiVanningMotor(hass, oppsett)
+    motor.entry = entry
     await motor.start()
     hass.data.setdefault(DOMAIN, {})[entry.entry_id] = motor
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
@@ -41,6 +42,17 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         for m in hass.data[DOMAIN].values():
             await m.stopp_alt()
 
+    async def lag_program(call: ServiceCall) -> None:
+        """Lager et nytt program eller oppdaterer et som finnes fra før."""
+        for m in hass.data[DOMAIN].values():
+            if m.plan:
+                await m.lagre_program(dict(call.data))
+
+    async def slett_program(call: ServiceCall) -> None:
+        for m in hass.data[DOMAIN].values():
+            if m.plan:
+                await m.slett_program(call.data.get("navn"))
+
     async def sett_ferie(call: ServiceCall) -> None:
         for m in hass.data[DOMAIN].values():
             m.sett_ferie(bool(call.data.get("pa", True)))
@@ -51,6 +63,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     hass.services.async_register(DOMAIN, "kjor_program", kjor_program)
     hass.services.async_register(DOMAIN, "stopp", stopp)
     hass.services.async_register(DOMAIN, "sett_ferie", sett_ferie)
+    hass.services.async_register(DOMAIN, "lag_program", lag_program)
+    hass.services.async_register(DOMAIN, "slett_program", slett_program)
     return True
 
 

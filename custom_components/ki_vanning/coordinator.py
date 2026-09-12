@@ -296,6 +296,50 @@ class KiVanningMotor:
         if self.plan:
             await self.plan.stopp_alt()
 
+    async def lagre_program(self, data: dict[str, Any]) -> None:
+        """Skriver et program til innstillingene. Navnet er nøkkelen."""
+        navn = str(data.get("navn") or "").strip()
+        if not navn:
+            return
+        rad = {
+            "navn": navn,
+            "tid": str(data.get("tid") or "06:00")[:5],
+            "dager": data.get("dager") or [],
+            "intervall": int(data.get("intervall") or 0),
+            "start_dato": str(data.get("start_dato") or ""),
+            "soner": data.get("soner") or [],
+            "samtidig": bool(data.get("samtidig")),
+            "aktiv": data.get("aktiv") if data.get("aktiv") is not None else True,
+            "ferie": bool(data.get("ferie")),
+        }
+        if isinstance(rad["dager"], str):
+            rad["dager"] = [d.strip() for d in rad["dager"].split(",") if d.strip()]
+        if isinstance(rad["soner"], str):
+            # «switch.x:10, switch.y:5»
+            rad["soner"] = [{"entity": d.split(":")[0].strip(), "min": float(d.split(":")[1])}
+                            for d in rad["soner"].split(",") if ":" in d]
+        if not rad["dager"] and not rad["intervall"]:
+            rad["dager"] = list(UKEDAGER)
+        liste = [p for p in (self.oppsett.get("programmer") or []) if str(p.get("navn")) != navn]
+        liste.append(rad)
+        await self._lagre_programmer(liste)
+
+    async def slett_program(self, navn: str | None) -> None:
+        if not navn:
+            return
+        liste = [p for p in (self.oppsett.get("programmer") or []) if str(p.get("navn")) != str(navn)]
+        await self._lagre_programmer(liste)
+
+    async def _lagre_programmer(self, liste: list[dict[str, Any]]) -> None:
+        self.oppsett["programmer"] = liste
+        entry = getattr(self, "entry", None)
+        if entry is not None:
+            self.hass.config_entries.async_update_entry(entry, options={**entry.options, "programmer": liste})
+        if self.plan:
+            self.plan.les_programmer()
+        await self._hent_plan(None)
+        self._varsle()
+
     def sett_ferie(self, pa: bool) -> None:
         self.oppsett["ferie"] = bool(pa)
         if self.plan:
