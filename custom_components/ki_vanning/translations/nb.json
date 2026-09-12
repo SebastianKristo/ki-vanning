@@ -54,12 +54,52 @@
     "step": {
       "init": {
         "title": "KI Vanning",
+        "menu_options": {
+          "innstillinger": "Innstillinger",
+          "programmer": "Programmer",
+          "ventiler_endre": "Ventiler"
+        }
+      },
+      "innstillinger": {
+        "title": "Innstillinger",
         "data": {
-          "flow": "Flow-sensor (L/min)",
+          "flow": "Felles flow-sensor (valgfri)",
           "host": "OpenSprinkler-adresse (valgfri)",
           "passord": "API-passord (valgfri)",
           "pris": "Vannpris (kr/m³)",
-          "min_flow": "Laveste flow som teller (L/min)"
+          "min_flow": "Laveste flow som teller (L/min)",
+          "ferie_faktor": "Ganger vanningstiden i ferie"
+        }
+      },
+      "programmer": {
+        "title": "Programmer",
+        "description": "Velg et program å endre, eller lag et nytt.",
+        "data": {
+          "program": "Program"
+        }
+      },
+      "program": {
+        "title": "Program",
+        "description": "Endrer: {navn}",
+        "data": {
+          "navn": "Navn",
+          "tid": "Starter",
+          "dager": "Ukedager (tomt hvis du bruker intervall)",
+          "intervall": "Hver N. dag (0 = bruk ukedager)",
+          "start_dato": "Første gang (ÅÅÅÅ-MM-DD)",
+          "soner": "Soner som skal vannes",
+          "minutter": "Minutter per sone, f.eks. switch.bed:10, switch.hekk:20",
+          "samtidig": "Kjør sonene samtidig",
+          "ferie": "Bare i feriemodus",
+          "aktiv": "Programmet er på",
+          "slett": "Slett dette programmet"
+        }
+      },
+      "ventiler_endre": {
+        "title": "Ventiler",
+        "description": "Én ventil per linje: entitet | navn | gruppe | flow-sensor",
+        "data": {
+          "soner": "Ventiler"
         }
       }
     }

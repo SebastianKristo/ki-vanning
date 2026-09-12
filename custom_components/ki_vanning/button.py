@@ -6,7 +6,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-from .const import DOMAIN
+from .const import ATTR_INTEGRASJON, ATTR_TYPE, DOMAIN
 from .entity import KiVanningEntitet
 
 
@@ -25,6 +25,10 @@ class Nullstill(KiVanningEntitet, ButtonEntity):
         super().__init__(motor, f"nullstill_{hva}", navn)
         self.hva = hva
 
+    @property
+    def extra_state_attributes(self) -> dict:
+        return {ATTR_INTEGRASJON: DOMAIN, ATTR_TYPE: "nullstill_" + self.hva}
+
     async def async_press(self) -> None:
         await self.motor.nullstill(self.hva)
 
@@ -34,6 +38,10 @@ class HentPlan(KiVanningEntitet, ButtonEntity):
 
     def __init__(self, motor) -> None:
         super().__init__(motor, "hent_plan", "Hent programplan")
+
+    @property
+    def extra_state_attributes(self) -> dict:
+        return {ATTR_INTEGRASJON: DOMAIN, ATTR_TYPE: "hent_plan"}
 
     async def async_press(self) -> None:
         await self.motor._hent_plan(None)
