@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 DOMAIN = "ki_vanning"
-PLATFORMS = ["sensor", "number", "button", "binary_sensor"]
+PLATFORMS = ["sensor", "number", "button", "binary_sensor", "switch"]
 
 # Konfigurasjon
 CONF_PREFIKS = "prefiks"          # entitetsprefiks for OpenSprinkler, f.eks. ute_opensprinkler
@@ -11,6 +11,18 @@ CONF_HOST = "host"                # OpenSprinkler-adresse (valgfri, gir programp
 CONF_PASSORD = "passord"          # md5-passord til OpenSprinkler-API-et
 CONF_PRIS = "pris"                # kr per m³
 CONF_MIN_FLOW = "min_flow"        # under denne regnes flow som null (L/min)
+CONF_MODUS = "modus"              # opensprinkler | ventiler
+CONF_SONER = "soner"              # egne ventiler: [{entity, navn, ikon}]
+CONF_PROGRAMMER = "programmer"    # [{navn, dager, tid, soner:[{entity,min}], aktiv, ferie}]
+CONF_FERIE = "ferie"              # ferie-modus av/på
+CONF_FERIE_FAKTOR = "ferie_faktor"  # ganger vanningstiden i ferie
+
+MODUS_OS = "opensprinkler"
+MODUS_VENTILER = "ventiler"
+
+STD_FERIE_FAKTOR = 1.3
+MAKS_MINUTTER = 180               # sikkerhetsgrense for én kjøring
+UKEDAGER = ["man", "tir", "ons", "tor", "fre", "lor", "son"]
 
 STD_PRIS = 41.11
 STD_MIN_FLOW = 0.3

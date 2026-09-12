@@ -21,9 +21,11 @@ from homeassistant.helpers.event import async_track_state_change_event, async_tr
 from homeassistant.helpers.storage import Store
 from homeassistant.util import dt as dt_util
 
+from .planlegger import Planlegger
 from .const import (
     ATTR_INTEGRASJON,
     DOMAIN,
+    MODUS_VENTILER,
     LAGER_NOKKEL,
     LAGER_VERSJON,
     PERIODER,
@@ -110,14 +112,19 @@ class KiVanningMotor:
         self._lytter: list[Any] = []
         self._sist: datetime | None = None
         self._anker: dict[str, str] = {}
-        self._lager = Store(hass, LAGER_VERSJON, f"{LAGER_NOKKEL}_{oppsett.get('prefiks','os')}")
+        self.modus = oppsett.get("modus") or ("ventiler" if oppsett.get("soner") else "opensprinkler")
+        self.plan = Planlegger(hass, self) if self.modus == MODUS_VENTILER else None
+        self._lager = Store(hass, LAGER_VERSJON, f"{LAGER_NOKKEL}_{oppsett.get('prefiks') or 'ventiler'}")
         self._lyttere: list[Any] = []
 
     # ------------------------------------------------------------------ oppsett
     async def start(self) -> None:
         await self._les_lager()
         self._finn_soner()
-        self._finn_programmer()
+        if self.plan:
+            self.plan.start()
+        else:
+            self._finn_programmer()
         self._lytter.append(async_track_time_interval(self.hass, self._tikk, TIKK))
         self._lytter.append(async_track_time_interval(self.hass, self._hent_plan, PLAN_INTERVALL))
         fulgte = ([self.oppsett["flow"]] + [s.gaar for s in self.soner.values()]
@@ -126,6 +133,8 @@ class KiVanningMotor:
         await self._hent_plan(None)
 
     async def stopp(self) -> None:
+        if self.plan:
+            self.plan.stopp()
         for av in self._lytter:
             av()
         self._lytter.clear()
@@ -147,7 +156,9 @@ class KiVanningMotor:
 
     # ------------------------------------------------------------------ soner
     def _finn_soner(self) -> None:
-        """Leser sonene rett ut av OpenSprinkler-entitetene."""
+        """Leser sonene: enten fra OpenSprinkler-entitetene, eller fra ventilene du har satt opp selv."""
+        if self.modus == MODUS_VENTILER:
+            return self._finn_ventiler()
         pref = self.oppsett["prefiks"]
         moenster = re.compile(rf"^switch\.{re.escape(pref)}_s(\d\d)(.*)_station_enabled$")
         for eid in self.hass.states.async_entity_ids("switch"):
@@ -221,6 +232,35 @@ class KiVanningMotor:
         if not p.soner:
             return
 
+    def _finn_ventiler(self) -> None:
+        """Egne ventiler: hver bryter er en sone, med navn og ikon fra oppsettet."""
+        for i, rad in enumerate(self.oppsett.get("soner") or [], start=1):
+            eid = rad.get("entity") if isinstance(rad, dict) else rad
+            if not eid:
+                continue
+            st = self.hass.states.get(eid)
+            navn = (rad.get("navn") if isinstance(rad, dict) else None) \
+                or (st.attributes.get("friendly_name") if st else None) or eid.split(".")[-1].replace("_", " ").title()
+            slug = re.sub(r"[^a-z0-9]+", "_", navn.lower().replace("ø", "o").replace("æ", "a").replace("å", "a")).strip("_")
+            sone = self.soner.get(i) or Sone(nr=i, slug=slug, navn=navn)
+            sone.navn, sone.slug = navn, slug
+            sone.metode = (rad.get("metode") if isinstance(rad, dict) else "") or ""
+            sone.boks = (rad.get("gruppe") if isinstance(rad, dict) else "") or ""
+            sone.bryter = eid
+            sone.gaar = eid                 # bryteren er både av/på og «kjører»
+            sone.status = eid
+            self.soner[i] = sone
+
+    def sone_for(self, nokkel: str | None) -> Sone | None:
+        """Finner en sone ut fra entitets-id, navn eller nummer."""
+        if nokkel is None:
+            return None
+        tekst = str(nokkel).strip().lower()
+        for s in self.soner.values():
+            if s.bryter.lower() == tekst or s.navn.lower() == tekst or s.slug == tekst or str(s.nr) == tekst:
+                return s
+        return None
+
     def alle(self) -> list[Sone]:
         return [self.soner[n] for n in sorted(self.soner)] + [self.hageslange]
 
@@ -230,6 +270,25 @@ class KiVanningMotor:
             if st and st.state == "on":
                 return s
         return None
+
+    # ------------------------------------------------------------ egne ventiler
+    async def kjor_sone(self, entity: str, minutter: float) -> None:
+        if self.plan:
+            await self.plan.kjor_sone(entity, minutter)
+
+    async def kjor_program(self, navn: str) -> None:
+        if self.plan:
+            await self.plan.kjor_program(navn)
+
+    async def stopp_alt(self) -> None:
+        if self.plan:
+            await self.plan.stopp_alt()
+
+    def sett_ferie(self, pa: bool) -> None:
+        self.oppsett["ferie"] = bool(pa)
+        if self.plan:
+            self.plan.ferie = bool(pa)
+        self._varsle()
 
     def _flow(self) -> float:
         st = self.hass.states.get(self.oppsett["flow"])
@@ -397,6 +456,17 @@ class KiVanningMotor:
 
     # ------------------------------------------------------------------ plan
     async def _hent_plan(self, _nå) -> None:
+        if self.plan:
+            self.plan.les_programmer()
+            self.planlagt = self.plan.planlagt()
+            kommende = [p for p in self.planlagt if p["minutter_til"] >= 0]
+            if kommende:
+                n = kommende[0]
+                dager = n["minutter_til"] // 1440
+                self.neste = {**n, "naar": "I dag" if dager == 0 else "I morgen" if dager == 1
+                              else UKEDAGER[dt_util.parse_datetime(n["start"]).weekday()], "dager_fram": dager}
+            self._varsle()
+            return
         """Bygger planen. Kalenderen fra OpenSprinkler-integrasjonen er hovedkilden;
         er adressen fylt ut, hentes den nøyaktige programtabellen fra /jp i tillegg."""
         self._finn_programmer()
@@ -612,6 +682,8 @@ class KiVanningMotor:
 
     def programliste(self) -> list[dict[str, Any]]:
         """Programmene med historikk, til kortet."""
+        if self.plan:
+            return [{**p.som_dict(), "slug": p.navn.lower().replace(" ", "_")} for p in self.plan.programmer]
         return [
             {"navn": p.navn, "slug": p.slug, "bryter": p.bryter, "gaar": p.gaar, "start": p.start,
              "soner": p.soner, "total_min": p.total_min, "dager": p.dager,

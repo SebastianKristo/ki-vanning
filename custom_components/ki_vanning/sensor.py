@@ -316,6 +316,7 @@ class AktivSone(KiVanningEntitet, SensorEntity):
         flow = self.motor._flow()
         return {
             ATTR_INTEGRASJON: DOMAIN, ATTR_TYPE: "aktiv", "flow": flow,
+            **({"planlegger": self.motor.plan.status()} if self.motor.plan else {}),
             "sone_nr": s.nr if s else None, "metode": s.metode if s else "",
             "liter_denne_kjoringen": round(s.liter - s._start_liter, 1) if s and s._start else 0,
             "minutter_denne_kjoringen": round(s.minutter - s._start_min, 1) if s and s._start else 0,
@@ -340,7 +341,9 @@ class Oversikt(KiVanningEntitet, SensorEntity):
         e = m.estimat_i_dag()
         return {
             ATTR_INTEGRASJON: DOMAIN, ATTR_TYPE: "oversikt",
-            "prefiks": m.oppsett["prefiks"], "pris_m3": m.pris(),
+            "modus": m.modus, "prefiks": m.oppsett.get("prefiks") or "", "pris_m3": m.pris(),
+            **({"planlegger": m.plan.status(), "ferie": bool(m.oppsett.get("ferie")),
+                "ferie_faktor": m.oppsett.get("ferie_faktor")} if m.plan else {}),
             "i_dag": m.total("liter", "i_dag"), "uke": m.total("liter", "uke"),
             "maaned": m.total("liter", "maaned"), "aar": m.total("liter", "aar"),
             "totalt": m.total("liter"), "kostnad_i_dag": m.kostnad(m.total("liter", "i_dag")),

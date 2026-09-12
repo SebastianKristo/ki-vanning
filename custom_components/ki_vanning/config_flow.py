@@ -11,7 +11,15 @@ from homeassistant.core import callback
 from homeassistant.helpers import selector
 
 from .const import (
+    CONF_FERIE_FAKTOR,
     CONF_FLOW,
+    CONF_MODUS,
+    CONF_PROGRAMMER,
+    CONF_SONER,
+    MODUS_OS,
+    MODUS_VENTILER,
+    STD_FERIE_FAKTOR,
+    UKEDAGER,
     CONF_HOST,
     CONF_MIN_FLOW,
     CONF_PASSORD,
@@ -48,7 +56,63 @@ class KiVanningFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
     VERSION = 1
 
+    def __init__(self) -> None:
+        self._data: dict[str, Any] = {}
+        self._soner: list[dict[str, Any]] = []
+
     async def async_step_user(self, user_input: dict[str, Any] | None = None):
+        """Velg hva slags anlegg det er."""
+        if user_input is not None:
+            if user_input[CONF_MODUS] == MODUS_VENTILER:
+                return await self.async_step_ventiler()
+            return await self.async_step_opensprinkler()
+        skjema = vol.Schema({
+            vol.Required(CONF_MODUS, default=MODUS_OS if _finn_prefiks(self.hass) else MODUS_VENTILER):
+                selector.SelectSelector(selector.SelectSelectorConfig(options=[
+                    {"value": MODUS_OS, "label": "OpenSprinkler"},
+                    {"value": MODUS_VENTILER, "label": "Egne ventiler (brytere)"}], mode="list")),
+        })
+        return self.async_show_form(step_id="user", data_schema=skjema)
+
+    # ------------------------------------------------------------ egne ventiler
+    async def async_step_ventiler(self, user_input: dict[str, Any] | None = None):
+        """Vannmåler og pris – deretter legges sonene til én etter én."""
+        if user_input is not None:
+            self._data = {**user_input, CONF_MODUS: MODUS_VENTILER}
+            return await self.async_step_sone()
+        skjema = vol.Schema({
+            vol.Optional(CONF_FLOW, default=_finn_flow(self.hass) or ""): selector.EntitySelector(
+                selector.EntitySelectorConfig(domain="sensor")),
+            vol.Optional(CONF_PRIS, default=STD_PRIS): vol.Coerce(float),
+            vol.Optional(CONF_FERIE_FAKTOR, default=STD_FERIE_FAKTOR): vol.Coerce(float),
+        })
+        return self.async_show_form(step_id="ventiler", data_schema=skjema)
+
+    async def async_step_sone(self, user_input: dict[str, Any] | None = None):
+        """Legg til én ventil om gangen."""
+        if user_input is not None:
+            if user_input.get("entity"):
+                self._soner.append({"entity": user_input["entity"], "navn": user_input.get("navn") or "",
+                                    "metode": user_input.get("metode") or ""})
+            if user_input.get("flere") and user_input.get("entity"):
+                return await self.async_step_sone()
+            if not self._soner:
+                return self.async_abort(reason="ingen_soner")
+            await self.async_set_unique_id("ki_vanning_ventiler")
+            self._abort_if_unique_id_configured()
+            return self.async_create_entry(title="KI Vanning", data={**self._data, CONF_SONER: self._soner,
+                                                                     CONF_PROGRAMMER: []})
+        skjema = vol.Schema({
+            vol.Optional("entity"): selector.EntitySelector(
+                selector.EntitySelectorConfig(domain=["switch", "valve", "input_boolean"])),
+            vol.Optional("navn", default=""): str,
+            vol.Optional("metode", default=""): str,
+            vol.Optional("flere", default=True): bool,
+        })
+        return self.async_show_form(step_id="sone", data_schema=skjema,
+                                    description_placeholders={"antall": str(len(self._soner))})
+
+    async def async_step_opensprinkler(self, user_input: dict[str, Any] | None = None):
         feil: dict[str, str] = {}
         prefiks = _finn_prefiks(self.hass)
         flow = _finn_flow(self.hass)
@@ -59,7 +123,7 @@ class KiVanningFlow(config_entries.ConfigFlow, domain=DOMAIN):
             else:
                 await self.async_set_unique_id(user_input[CONF_PREFIKS])
                 self._abort_if_unique_id_configured()
-                return self.async_create_entry(title="KI Vanning", data=user_input)
+                return self.async_create_entry(title="KI Vanning", data={**user_input, CONF_MODUS: MODUS_OS})
 
         skjema = vol.Schema(
             {
@@ -74,7 +138,7 @@ class KiVanningFlow(config_entries.ConfigFlow, domain=DOMAIN):
             }
         )
         return self.async_show_form(
-            step_id="user", data_schema=skjema, errors=feil,
+            step_id="opensprinkler", data_schema=skjema, errors=feil,
             description_placeholders={"prefiks": prefiks or "ikke funnet"},
         )
 

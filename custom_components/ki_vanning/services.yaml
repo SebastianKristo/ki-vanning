@@ -13,3 +13,37 @@ nullstill:
 hent_plan:
   name: Hent programplan
   description: Leser programmene fra OpenSprinkler på nytt.
+
+kjor:
+  name: Kjør sone
+  description: Slår på en ventil i et gitt antall minutter (egne ventiler).
+  fields:
+    sone:
+      name: Sone
+      description: Entitets-id eller navn på sonen
+      selector: { text: }
+    minutter:
+      name: Minutter
+      default: 10
+      selector: { number: { min: 1, max: 180, mode: box } }
+
+kjor_program:
+  name: Kjør program
+  description: Starter et program med en gang.
+  fields:
+    program:
+      name: Program
+      selector: { text: }
+
+stopp:
+  name: Stopp all vanning
+  description: Tømmer køen og slår av ventilene.
+
+sett_ferie:
+  name: Feriemodus
+  description: Slår feriemodus av eller på.
+  fields:
+    pa:
+      name: På
+      default: true
+      selector: { boolean: }

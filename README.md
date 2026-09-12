@@ -24,6 +24,49 @@ OpenSprinkler-integrasjonen.
 Alt ligger på én enhet, og `sensor.<navn>_oversikt` har hele oppsettet som attributter, slik at
 `ki-vanning-card` kan tegne kortet uten at du lister opp entiteter.
 
+## To måter å bruke den på
+
+Ved oppsettet velger du hva slags anlegg du har.
+
+**OpenSprinkler** – sonene, programmene og kalenderen leses fra OpenSprinkler-integrasjonen, og KI Vanning
+legger forbruk, kostnad og estimat oppå.
+
+**Egne ventiler** – har du Sonoff-ventiler eller andre brytere, styrer KI Vanning dem selv. Du legger til
+ventilene én etter én i oppsettet, og får:
+
+- <img src="https://raw.githubusercontent.com/SebastianKristo/ki-vanning/main/brand/plan.svg" width="20" align="absmiddle"> **Ukeprogram.** Hvert program har klokkeslett, hvilke
+  ukedager det gjelder, og hvor mange minutter hver sone skal gå. Sonene kjøres etter tur, aldri to samtidig.
+- <img src="https://raw.githubusercontent.com/SebastianKristo/ki-vanning/main/brand/logo.svg" width="20" align="absmiddle"> **Feriemodus.** `switch.feriemodus` slår på
+  ferieprogrammene – programmer merket `ferie: true` kjører bare da, og vanningstiden ganges med `ferie_faktor`
+  (1,3 som standard) fordi ingen er hjemme til å følge med.
+- <img src="https://raw.githubusercontent.com/SebastianKristo/ki-vanning/main/brand/forbruk.svg" width="20" align="absmiddle"> **Kjøring på tid.** `ki_vanning.kjor` med 1, 5, 10,
+  30 eller 60 minutter – det samme som knappene i kortet. Køen håndteres av integrasjonen, og en kjøring
+  stopper av seg selv (maks tre timer som sikkerhet).
+
+```yaml
+# Eksempel på programmer (lagres i integrasjonens innstillinger)
+programmer:
+  - navn: Morgen
+    tid: '06:00'
+    dager: [man, ons, fre]
+    soner:
+      - {entity: switch.kjokkenbed, min: 10}
+      - {entity: switch.veranda_blomster, min: 15}
+  - navn: Ferieuke
+    tid: '07:00'
+    dager: [man, tir, ons, tor, fre, lor, son]
+    ferie: true
+    soner:
+      - {entity: switch.veranda_spirea, min: 20}
+```
+
+### Tjenester for egne ventiler
+
+- `ki_vanning.kjor` – `sone` (entitet eller navn) og `minutter`
+- `ki_vanning.kjor_program` – `program`
+- `ki_vanning.stopp` – tømmer køen og slår av alt
+- `ki_vanning.sett_ferie` – `pa: true/false`
+
 ## Installasjon
 
 **HACS:** Legg til `https://github.com/SebastianKristo/ki-vanning` som egendefinert repository (type

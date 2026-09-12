@@ -3,7 +3,14 @@
     "step": {
       "user": {
         "title": "KI Vanning",
-        "description": "Fant OpenSprinkler: {prefiks}. Velg flow-sensoren fra vannmåleren. Programplan og estimat leses fra OpenSprinkler-integrasjonen selv – adresse og passord trengs bare hvis du vil ha den nøyaktige programtabellen med minutter per sone.",
+        "description": "Hva slags anlegg har du?",
+        "data": {
+          "modus": "Type anlegg"
+        }
+      },
+      "opensprinkler": {
+        "title": "OpenSprinkler",
+        "description": "Fant OpenSprinkler: {prefiks}. Velg flow-sensoren fra vannmåleren. Programplan og estimat leses fra OpenSprinkler-integrasjonen selv.",
         "data": {
           "prefiks": "OpenSprinkler-prefiks",
           "flow": "Flow-sensor (L/min)",
@@ -12,13 +19,33 @@
           "pris": "Vannpris (kr/m³)",
           "min_flow": "Laveste flow som teller (L/min)"
         }
+      },
+      "ventiler": {
+        "title": "Egne ventiler",
+        "description": "Har du Sonoff-ventiler eller andre brytere, styrer KI Vanning dem selv – med ukeprogram, feriemodus og kjøring på tid.",
+        "data": {
+          "flow": "Flow-sensor (L/min, valgfri)",
+          "pris": "Vannpris (kr/m³)",
+          "ferie_faktor": "Ganger vanningstiden i ferie"
+        }
+      },
+      "sone": {
+        "title": "Legg til ventil",
+        "description": "Lagt til så langt: {antall}. Velg ventilen, gi den et navn, og huk av for flere hvis du har fler.",
+        "data": {
+          "entity": "Ventil (bryter)",
+          "navn": "Navn",
+          "metode": "Type (drypp, spreder …)",
+          "flere": "Legg til én til"
+        }
       }
     },
     "error": {
       "fant_ikke_opensprinkler": "Fant ingen OpenSprinkler-entiteter. Skriv inn prefikset manuelt."
     },
     "abort": {
-      "already_configured": "Denne kontrolleren er allerede satt opp."
+      "already_configured": "Denne kontrolleren er allerede satt opp.",
+      "ingen_soner": "Du må legge til minst én ventil."
     }
   },
   "options": {
