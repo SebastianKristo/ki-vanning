@@ -78,6 +78,7 @@ class Sone:
     bryter: str = ""
     gaar: str = ""
     status: str = ""
+    flow: str = ""                 # egen flow-sensor for sonen (L/min)
     liter: float = 0.0
     minutter: float = 0.0
     perioder: dict[str, float] = field(default_factory=lambda: {p: 0.0 for p in PERIODER})
@@ -127,8 +128,12 @@ class KiVanningMotor:
             self._finn_programmer()
         self._lytter.append(async_track_time_interval(self.hass, self._tikk, TIKK))
         self._lytter.append(async_track_time_interval(self.hass, self._hent_plan, PLAN_INTERVALL))
-        fulgte = ([self.oppsett["flow"]] + [s.gaar for s in self.soner.values()]
-                  + [p.gaar for p in self.programmer.values()])
+        fulgte = [x for x in ([self.oppsett.get("flow")]
+                              + [s.gaar for s in self.soner.values()]
+                              + [s.flow for s in self.soner.values()]
+                              + [p.gaar for p in self.programmer.values()]) if x]
+        if not fulgte:
+            fulgte = ["sensor.ki_vanning_finnes_ikke"]
         self._lytter.append(async_track_state_change_event(self.hass, fulgte, self._endring))
         await self._hent_plan(None)
 
@@ -159,7 +164,9 @@ class KiVanningMotor:
         """Leser sonene: enten fra OpenSprinkler-entitetene, eller fra ventilene du har satt opp selv."""
         if self.modus == MODUS_VENTILER:
             return self._finn_ventiler()
-        pref = self.oppsett["prefiks"]
+        pref = self.oppsett.get("prefiks") or ""
+        if not pref:
+            return
         moenster = re.compile(rf"^switch\.{re.escape(pref)}_s(\d\d)(.*)_station_enabled$")
         for eid in self.hass.states.async_entity_ids("switch"):
             traff = moenster.match(eid)
@@ -191,7 +198,9 @@ class KiVanningMotor:
 
     def _finn_programmer(self) -> None:
         """Leser programmene fra OpenSprinkler-integrasjonens egne entiteter."""
-        pref = self.oppsett["prefiks"]
+        pref = self.oppsett.get("prefiks") or ""
+        if not pref:
+            return
         moenster = re.compile(rf"^switch\.{re.escape(pref)}_(.+)_program_enabled$")
         for eid in self.hass.states.async_entity_ids("switch"):
             traff = moenster.match(eid)
@@ -244,6 +253,7 @@ class KiVanningMotor:
             slug = re.sub(r"[^a-z0-9]+", "_", navn.lower().replace("ø", "o").replace("æ", "a").replace("å", "a")).strip("_")
             sone = self.soner.get(i) or Sone(nr=i, slug=slug, navn=navn)
             sone.navn, sone.slug = navn, slug
+            sone.flow = (rad.get("flow") if isinstance(rad, dict) else "") or ""
             sone.metode = (rad.get("metode") if isinstance(rad, dict) else "") or ""
             sone.boks = (rad.get("gruppe") if isinstance(rad, dict) else "") or ""
             sone.bryter = eid
@@ -262,7 +272,9 @@ class KiVanningMotor:
         return None
 
     def alle(self) -> list[Sone]:
-        return [self.soner[n] for n in sorted(self.soner)] + [self.hageslange]
+        """Hageslangen tas bare med når det finnes en felles vannmåler å fange den opp med."""
+        soner = [self.soner[n] for n in sorted(self.soner)]
+        return soner + ([self.hageslange] if self.oppsett.get("flow") else [])
 
     def aktiv(self) -> Sone | None:
         for s in self.soner.values():
@@ -290,8 +302,12 @@ class KiVanningMotor:
             self.plan.ferie = bool(pa)
         self._varsle()
 
-    def _flow(self) -> float:
-        st = self.hass.states.get(self.oppsett["flow"])
+    def _flow(self, sone: "Sone | None" = None) -> float:
+        """Flow i L/min: sonens egen måler hvis den har en, ellers den felles."""
+        id_ = (sone.flow if sone and sone.flow else None) or self.oppsett.get("flow")
+        if not id_:
+            return 0.0
+        st = self.hass.states.get(id_)
         try:
             v = float(st.state) if st else 0.0
         except (TypeError, ValueError):
@@ -321,11 +337,12 @@ class KiVanningMotor:
         self._sist = nå
         if minutter <= 0 or minutter > 10:      # hopp over lange pauser (omstart)
             return
-        flow = self._flow()
         sone = self.aktiv()
+        flow = self._flow(sone)
         mål = sone or (self.hageslange if flow > 0 else None)
         if mål is None:
             self._avslutt_kjoringer(None)
+            self._foelg_programmer()
             return
         liter = flow * minutter
         mål.liter += liter
@@ -402,9 +419,11 @@ class KiVanningMotor:
 
     def rate(self, sone: Sone) -> float:
         """Kalibrert rate, ellers målt flow, ellers standardverdi."""
+        if sone is None:
+            return STD_FALLBACK_RATE
         if sone.rate > 0:
             return sone.rate
-        flow = self._flow()
+        flow = self._flow(sone)
         return round(flow, 2) if flow > 0 else STD_FALLBACK_RATE
 
     # ------------------------------------------------------------------ lagring
@@ -568,7 +587,7 @@ class KiVanningMotor:
     def _kalender(self) -> str | None:
         """Finner kalenderen OpenSprinkler-integrasjonen lager."""
         if self.oppsett.get("kalender"):
-            return self.oppsett["kalender"]
+            return self.oppsett.get("kalender")
         for eid in self.hass.states.async_entity_ids("calendar"):
             if "opensprinkler" in eid or "sprinkler" in eid:
                 return eid

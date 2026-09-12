@@ -15,10 +15,11 @@ class KiVanningEntitet(Entity):
 
     def __init__(self, motor: KiVanningMotor, nokkel: str, navn: str) -> None:
         self.motor = motor
-        self._attr_unique_id = f"{DOMAIN}_{motor.oppsett['prefiks']}_{nokkel}"
+        grunn = motor.oppsett.get("prefiks") or "ventiler"
+        self._attr_unique_id = f"{DOMAIN}_{grunn}_{nokkel}"
         self._attr_name = navn
         self._attr_device_info = DeviceInfo(
-            identifiers={(DOMAIN, motor.oppsett["prefiks"])},
+            identifiers={(DOMAIN, motor.oppsett.get("prefiks") or "ventiler")},
             name="KI Vanning",
             manufacturer="KI",
             model="OpenSprinkler-forbruk",

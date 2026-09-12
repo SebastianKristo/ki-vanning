@@ -313,7 +313,7 @@ class AktivSone(KiVanningEntitet, SensorEntity):
     @property
     def extra_state_attributes(self) -> dict:
         s = self.motor.aktiv()
-        flow = self.motor._flow()
+        flow = self.motor._flow(s)
         return {
             ATTR_INTEGRASJON: DOMAIN, ATTR_TYPE: "aktiv", "flow": flow,
             **({"planlegger": self.motor.plan.status()} if self.motor.plan else {}),
@@ -351,7 +351,7 @@ class Oversikt(KiVanningEntitet, SensorEntity):
             "neste": m.neste, "programmer": m.planlagt, "program_historikk": m.programliste(),
             "soner": [
                 {"nr": s.nr, "navn": s.navn, "metode": s.metode, "boks": s.boks,
-                 "bryter": s.bryter, "gaar": s.gaar, "status": s.status,
+                 "bryter": s.bryter, "gaar": s.gaar, "status": s.status, "flow": s.flow,
                  **{p: round(s.perioder[p], 1) for p in PERIODER},
                  "totalt": round(s.liter, 1), "minutter": round(s.minutter, 1),
                  "rate": m.rate(s), "kalibrert": s.rate > 0,

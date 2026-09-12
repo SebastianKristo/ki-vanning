@@ -39,6 +39,10 @@ ventilene én etter én i oppsettet, og får:
 - <img src="https://raw.githubusercontent.com/SebastianKristo/ki-vanning/main/brand/logo.svg" width="20" align="absmiddle"> **Feriemodus.** `switch.feriemodus` slår på
   ferieprogrammene – programmer merket `ferie: true` kjører bare da, og vanningstiden ganges med `ferie_faktor`
   (1,3 som standard) fordi ingen er hjemme til å følge med.
+- <img src="https://raw.githubusercontent.com/SebastianKristo/ki-vanning/main/brand/soner.svg" width="20" align="absmiddle"> **Flow per sone.**
+  Har hver ventil sin egen måler, settes den på sonen – da føres literne fra riktig måler, og en felles
+  vannmåler er ikke nødvendig. Uten felles måler droppes «hageslange»-posten, siden det ikke er noe å fange
+  den opp med.
 - <img src="https://raw.githubusercontent.com/SebastianKristo/ki-vanning/main/brand/forbruk.svg" width="20" align="absmiddle"> **Kjøring på tid.** `ki_vanning.kjor` med 1, 5, 10,
   30 eller 60 minutter – det samme som knappene i kortet. Køen håndteres av integrasjonen, og en kjøring
   stopper av seg selv (maks tre timer som sikkerhet).

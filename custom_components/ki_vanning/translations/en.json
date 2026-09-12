@@ -24,7 +24,7 @@
         "title": "Egne ventiler",
         "description": "Har du Sonoff-ventiler eller andre brytere, styrer KI Vanning dem selv – med ukeprogram, feriemodus og kjøring på tid.",
         "data": {
-          "flow": "Flow-sensor (L/min, valgfri)",
+          "flow": "Felles flow-sensor (valgfri – kan settes per sone i stedet)",
           "pris": "Vannpris (kr/m³)",
           "ferie_faktor": "Ganger vanningstiden i ferie"
         }
@@ -36,7 +36,9 @@
           "entity": "Ventil (bryter)",
           "navn": "Navn",
           "metode": "Type (drypp, spreder …)",
-          "flere": "Legg til én til"
+          "flere": "Legg til én til",
+          "gruppe": "Gruppe (f.eks. Veranda)",
+          "flow": "Egen flow-sensor for denne sonen (L/min)"
         }
       }
     },

@@ -93,7 +93,9 @@ class KiVanningFlow(config_entries.ConfigFlow, domain=DOMAIN):
         if user_input is not None:
             if user_input.get("entity"):
                 self._soner.append({"entity": user_input["entity"], "navn": user_input.get("navn") or "",
-                                    "metode": user_input.get("metode") or ""})
+                                    "metode": user_input.get("metode") or "",
+                                    "gruppe": user_input.get("gruppe") or "",
+                                    "flow": user_input.get("flow") or ""})
             if user_input.get("flere") and user_input.get("entity"):
                 return await self.async_step_sone()
             if not self._soner:
@@ -107,6 +109,8 @@ class KiVanningFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 selector.EntitySelectorConfig(domain=["switch", "valve", "input_boolean"])),
             vol.Optional("navn", default=""): str,
             vol.Optional("metode", default=""): str,
+            vol.Optional("gruppe", default=""): str,
+            vol.Optional("flow"): selector.EntitySelector(selector.EntitySelectorConfig(domain="sensor")),
             vol.Optional("flere", default=True): bool,
         })
         return self.async_show_form(step_id="sone", data_schema=skjema,
