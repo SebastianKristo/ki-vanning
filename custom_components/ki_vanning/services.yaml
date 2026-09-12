@@ -1,0 +1,15 @@
+nullstill:
+  name: Nullstill tellere
+  description: Nullstiller forbruk, kalibrering eller begge deler.
+  fields:
+    hva:
+      name: Hva
+      description: alt, forbruk eller kalibrering
+      default: alt
+      selector:
+        select:
+          options: [alt, forbruk, kalibrering]
+
+hent_plan:
+  name: Hent programplan
+  description: Leser programmene fra OpenSprinkler på nytt.

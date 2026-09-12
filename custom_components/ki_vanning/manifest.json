@@ -1,0 +1,13 @@
+{
+  "domain": "ki_vanning",
+  "name": "KI Vanning",
+  "version": "1.0.0",
+  "documentation": "https://github.com/SebastianKristo/ki-vanning",
+  "issue_tracker": "https://github.com/SebastianKristo/ki-vanning/issues",
+  "codeowners": ["@SebastianKristo"],
+  "config_flow": true,
+  "iot_class": "local_polling",
+  "integration_type": "service",
+  "dependencies": [],
+  "requirements": []
+}
