@@ -11,8 +11,12 @@ OpenSprinkler-integrasjonen.
 - **Fører forbruk** per sone: totalt, i dag, denne uken, denne måneden og i år – i liter og kroner.
 - **Kalibrerer seg selv.** Kjøretiden per sone måles, og L/min regnes ut som faktisk forbruk delt på faktisk
   kjøretid. Sonen som aldri har kjørt bruker målt flow eller 8 L/min.
-- **Leser programplanen** fra OpenSprinkler (`/jp`) og regner ut hva som er planlagt i dag, når neste
-  vanning kommer, og hvor mye det kommer til å koste – kalibrert per sone.
+- **Leser programplanen** fra OpenSprinkler-integrasjonen selv: kalenderen `calendar.opensprinkler_schedule`
+  gir kommende kjøringer, og programmenes egne entiteter gir navn, starttid og – der integrasjonen oppgir dem –
+  minutter per sone. Ut av det kommer planlagt i dag, neste vanning og hva det kommer til å koste, kalibrert
+  per sone. Ingen API-adresse eller passord er nødvendig.
+- **Lærer av programmene.** Hver gang et program kjører, måles hvor mye vann det faktisk brukte. Kjenner vi
+  ikke minuttene per sone, brukes snittet fra tidligere kjøringer som estimat.
 - **Siste kjøring** per sone: liter, minutter og når den ble ferdig.
 
 Alt ligger på én enhet, og `sensor.<navn>_oversikt` har hele oppsettet som attributter, slik at
@@ -32,8 +36,8 @@ tjenester.
 |---|---|
 | OpenSprinkler-prefiks | Fylles ut automatisk, f.eks. `ute_opensprinkler` |
 | Flow-sensor | Sensoren fra vannmåleren i L/min |
-| OpenSprinkler-adresse | Valgfri. Uten den mangler programplan og estimat |
-| API-passord | md5-passordet fra OpenSprinkler |
+| OpenSprinkler-adresse | Valgfri. Gir den nøyaktige programtabellen med minutter per sone |
+| API-passord | Valgfri, hører sammen med adressen |
 | Vannpris | kr per m³ – kan endres etterpå med `number.vannpris` |
 | Laveste flow | Under denne regnes flow som null, så dryppet i røret ikke teller |
 

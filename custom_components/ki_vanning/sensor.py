@@ -274,6 +274,7 @@ class PlanlagtIDag(KiVanningEntitet, SensorEntity):
         return {ATTR_INTEGRASJON: DOMAIN, ATTR_TYPE: "plan",
                 "programmer": self.motor.dagens_programmer(),
                 "alle_programmer": self.motor.planlagt,
+                "program_historikk": self.motor.programliste(),
                 "feil": self.motor.plan_feil}
 
 
@@ -344,7 +345,7 @@ class Oversikt(KiVanningEntitet, SensorEntity):
             "maaned": m.total("liter", "maaned"), "aar": m.total("liter", "aar"),
             "totalt": m.total("liter"), "kostnad_i_dag": m.kostnad(m.total("liter", "i_dag")),
             "estimat_i_dag": e["liter"], "estimat_kostnad": e["kostnad"],
-            "neste": m.neste, "programmer": m.planlagt,
+            "neste": m.neste, "programmer": m.planlagt, "program_historikk": m.programliste(),
             "soner": [
                 {"nr": s.nr, "navn": s.navn, "metode": s.metode, "boks": s.boks,
                  "bryter": s.bryter, "gaar": s.gaar, "status": s.status,

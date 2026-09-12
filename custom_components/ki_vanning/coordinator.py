@@ -39,6 +39,32 @@ UKEDAGER = ["Mandag", "Tirsdag", "Onsdag", "Torsdag", "Fredag", "Lørdag", "Søn
 
 
 @dataclass
+class Program:
+    """Et OpenSprinkler-program med det vi vet om det."""
+
+    slug: str
+    navn: str
+    bryter: str = ""
+    gaar: str = ""
+    start: str = ""
+    soner: list = field(default_factory=list)      # [{navn, nr, min}] når vi kjenner dem
+    dager: int | None = None                      # bitmaske, mandag = bit 0
+    total_min: int = 0
+    kjoringer: int = 0
+    liter_sum: float = 0.0
+    min_sum: float = 0.0
+    siste_liter: float = 0.0
+    siste_minutter: float = 0.0
+    _start_liter: float = 0.0
+    _start_min: float = 0.0
+    _kjorer: bool = False
+
+    @property
+    def snitt_liter(self) -> float:
+        return round(self.liter_sum / self.kjoringer, 0) if self.kjoringer else 0.0
+
+
+@dataclass
 class Sone:
     """En OpenSprinkler-sone med tallene vi fører for den."""
 
@@ -77,6 +103,7 @@ class KiVanningMotor:
         self.oppsett = oppsett
         self.soner: dict[int, Sone] = {}
         self.hageslange = Sone(nr=0, slug="hageslange", navn="Hageslange", metode="Slange")
+        self.programmer: dict[str, Program] = {}
         self.planlagt: list[dict[str, Any]] = []
         self.neste: dict[str, Any] | None = None
         self.plan_feil: str | None = None
@@ -90,9 +117,11 @@ class KiVanningMotor:
     async def start(self) -> None:
         await self._les_lager()
         self._finn_soner()
+        self._finn_programmer()
         self._lytter.append(async_track_time_interval(self.hass, self._tikk, TIKK))
         self._lytter.append(async_track_time_interval(self.hass, self._hent_plan, PLAN_INTERVALL))
-        fulgte = [self.oppsett["flow"]] + [s.gaar for s in self.soner.values()]
+        fulgte = ([self.oppsett["flow"]] + [s.gaar for s in self.soner.values()]
+                  + [p.gaar for p in self.programmer.values()])
         self._lytter.append(async_track_state_change_event(self.hass, fulgte, self._endring))
         await self._hent_plan(None)
 
@@ -148,6 +177,49 @@ class KiVanningMotor:
             sone.status = f"sensor.{pref}_s{nr:02d}{hale}_station_status"
             self.soner[nr] = sone
         _LOGGER.debug("KI Vanning fant %s soner", len(self.soner))
+
+    def _finn_programmer(self) -> None:
+        """Leser programmene fra OpenSprinkler-integrasjonens egne entiteter."""
+        pref = self.oppsett["prefiks"]
+        moenster = re.compile(rf"^switch\.{re.escape(pref)}_(.+)_program_enabled$")
+        for eid in self.hass.states.async_entity_ids("switch"):
+            traff = moenster.match(eid)
+            if not traff:
+                continue
+            slug = traff.group(1)
+            st = self.hass.states.get(eid)
+            navn = re.sub(r"\s*Program Enabled$", "", (st.attributes.get("friendly_name") or slug), flags=re.I).strip()
+            p = self.programmer.get(slug) or Program(slug=slug, navn=navn)
+            p.navn, p.bryter = navn, eid
+            p.gaar = f"binary_sensor.{pref}_{slug}_program_running"
+            p.start = f"time.{pref}_{slug}_start_time"
+            self._les_programattributter(p)
+            self.programmer[slug] = p
+
+    def _les_programattributter(self, p: Program) -> None:
+        """Plukker varigheter og ukedager ut av attributtene, uansett hva de heter."""
+        for eid in (p.gaar, p.bryter):
+            st = self.hass.states.get(eid)
+            if not st:
+                continue
+            for nokkel, verdi in (st.attributes or {}).items():
+                n = nokkel.lower()
+                if isinstance(verdi, (list, tuple)) and verdi and all(isinstance(v, (int, float)) for v in verdi):
+                    if "duration" in n or "varighet" in n or "station" in n:
+                        soner = []
+                        for i, sek in enumerate(verdi):
+                            if int(sek or 0) <= 0:
+                                continue
+                            sone = self.soner.get(i + 1)
+                            soner.append({"navn": sone.navn if sone else f"Sone {i + 1:02d}",
+                                          "nr": i + 1, "min": int(int(sek) // 60) or 1})
+                        if soner:
+                            p.soner = soner
+                            p.total_min = sum(z["min"] for z in soner)
+                elif isinstance(verdi, int) and ("days" in n or "dager" in n) and 0 < verdi < 128:
+                    p.dager = verdi
+        if not p.soner:
+            return
 
     def alle(self) -> list[Sone]:
         return [self.soner[n] for n in sorted(self.soner)] + [self.hageslange]
@@ -205,6 +277,25 @@ class KiVanningMotor:
             for p in PERIODER:
                 mål.min_perioder[p] += minutter
         self._avslutt_kjoringer(mål)
+        self._foelg_programmer()
+
+    def _foelg_programmer(self) -> None:
+        """Summerer hvor mye vann hvert program faktisk bruker."""
+        totalt_liter = sum(s.liter for s in self.soner.values())
+        totalt_min = sum(s.minutter for s in self.soner.values())
+        for p in self.programmer.values():
+            st = self.hass.states.get(p.gaar)
+            kjorer = bool(st and st.state == "on")
+            if kjorer and not p._kjorer:
+                p._start_liter, p._start_min = totalt_liter, totalt_min
+            elif not kjorer and p._kjorer:
+                p.siste_liter = round(totalt_liter - p._start_liter, 1)
+                p.siste_minutter = round(totalt_min - p._start_min, 1)
+                if p.siste_liter > 1:
+                    p.kjoringer += 1
+                    p.liter_sum += p.siste_liter
+                    p.min_sum += p.siste_minutter
+            p._kjorer = kjorer
 
     def _avslutt_kjoringer(self, aktiv: Sone | None) -> None:
         """Fører «siste kjøring» når en sone stopper."""
@@ -306,10 +397,13 @@ class KiVanningMotor:
 
     # ------------------------------------------------------------------ plan
     async def _hent_plan(self, _nå) -> None:
-        """Leser programmene fra OpenSprinkler (/jp) og regner ut dagens plan."""
+        """Bygger planen. Kalenderen fra OpenSprinkler-integrasjonen er hovedkilden;
+        er adressen fylt ut, hentes den nøyaktige programtabellen fra /jp i tillegg."""
+        self._finn_programmer()
+        await self._plan_fra_kalender()
         vert, passord = self.oppsett.get("host"), self.oppsett.get("passord")
         if not vert:
-            self._plan_fra_kalender()
+            self._varsle()
             return
         url = f"http://{vert}/jp?pw={passord or ''}"
         try:
@@ -401,17 +495,92 @@ class KiVanningMotor:
                 break
         self.neste = best
 
-    def _plan_fra_kalender(self) -> None:
-        """Uten OpenSprinkler-adresse brukes kalenderen fra integrasjonen."""
-        st = self.hass.states.get("calendar.opensprinkler_schedule")
-        if not st:
+    def _kalender(self) -> str | None:
+        """Finner kalenderen OpenSprinkler-integrasjonen lager."""
+        if self.oppsett.get("kalender"):
+            return self.oppsett["kalender"]
+        for eid in self.hass.states.async_entity_ids("calendar"):
+            if "opensprinkler" in eid or "sprinkler" in eid:
+                return eid
+        return None
+
+    def _program_for(self, navn: str) -> Program | None:
+        n = str(navn or "").strip().lower()
+        for p in self.programmer.values():
+            if p.navn.strip().lower() == n or n.startswith(p.navn.strip().lower()):
+                return p
+        return None
+
+    def _estimat_for(self, p: Program | None, minutter: int) -> tuple[float, list]:
+        """Liter for en kjøring: sone for sone når vi kjenner dem, ellers historikk."""
+        if p and p.soner:
+            rader = []
+            sum_liter = 0.0
+            for z in p.soner:
+                sone = self.soner.get(z["nr"])
+                rate = self.rate(sone) if sone else STD_FALLBACK_RATE
+                liter = z["min"] * rate
+                sum_liter += liter
+                rader.append({"program": p.navn, "sone": z["navn"], "minutter": z["min"],
+                              "liter": round(liter), "rate": round(rate, 2),
+                              "kalibrert": bool(sone and sone.rate > 0)})
+            return sum_liter, rader
+        if p and p.snitt_liter:
+            return p.snitt_liter, []
+        rater = [s.rate for s in self.soner.values() if s.rate > 0]
+        snitt = sum(rater) / len(rater) if rater else STD_FALLBACK_RATE
+        return minutter * snitt, []
+
+    async def _plan_fra_kalender(self) -> None:
+        """Henter kommende kjøringer fra kalenderen til OpenSprinkler-integrasjonen."""
+        eid = self._kalender()
+        if not eid:
             return
-        start = st.attributes.get("start_time")
-        if start:
-            self.neste = {
-                "naar": "Neste", "tid": str(start)[11:16], "navn": st.attributes.get("message", "Program"),
-                "dager_fram": 0, "minutter_til": 0, "soner": [], "total_min": 0, "estimat_liter": 0,
-            }
+        nå = dt_util.now()
+        start = nå.replace(hour=0, minute=0, second=0, microsecond=0)
+        try:
+            svar = await self.hass.services.async_call(
+                "calendar", "get_events",
+                {"entity_id": eid, "start_date_time": start.isoformat(),
+                 "end_date_time": (start + timedelta(days=8)).isoformat()},
+                blocking=True, return_response=True,
+            )
+        except Exception as feil:  # noqa: BLE001
+            self.plan_feil = f"kalender: {feil}"
+            _LOGGER.debug("KI Vanning: klarte ikke lese kalenderen: %s", feil)
+            return
+        hendelser = (svar or {}).get(eid, {}).get("events", [])
+        programmer: list[dict[str, Any]] = []
+        for h in hendelser:
+            s_tid = dt_util.parse_datetime(h.get("start") or "") or dt_util.parse_date(h.get("start") or "")
+            e_tid = dt_util.parse_datetime(h.get("end") or "")
+            if s_tid is None:
+                continue
+            if not isinstance(s_tid, datetime):
+                s_tid = datetime.combine(s_tid, datetime.min.time())
+            s_tid = dt_util.as_local(s_tid) if s_tid.tzinfo else s_tid.replace(tzinfo=nå.tzinfo)
+            minutter = int(((dt_util.as_local(e_tid) - s_tid).total_seconds() // 60)) if e_tid else 0
+            navn = h.get("summary") or "Program"
+            p = self._program_for(navn)
+            liter, rader = self._estimat_for(p, minutter)
+            programmer.append({
+                "navn": navn, "tid": s_tid.strftime("%H:%M"), "start": s_tid.isoformat(),
+                "minutter_til": int((s_tid - nå).total_seconds() // 60),
+                "i_dag": s_tid.date() == nå.date(),
+                "total_min": minutter or (p.total_min if p else 0),
+                "soner": (p.soner if p else []),
+                "estimat_liter": round(liter), "estimat_rader": rader,
+                "kilde": "kalender",
+            })
+        if programmer:
+            self.planlagt = programmer
+            kommende = [p for p in programmer if p["minutter_til"] >= 0]
+            if kommende:
+                n = kommende[0]
+                dager = (dt_util.parse_datetime(n["start"]).date() - nå.date()).days
+                n = {**n, "naar": "I dag" if dager == 0 else "I morgen" if dager == 1
+                     else UKEDAGER[dt_util.parse_datetime(n["start"]).weekday()], "dager_fram": dager}
+                self.neste = n
 
     # ------------------------------------------------------------------ estimat
     def dagens_programmer(self) -> list[dict[str, Any]]:
@@ -422,14 +591,31 @@ class KiVanningMotor:
         rader: list[dict[str, Any]] = []
         sum_liter = 0.0
         for p in self.dagens_programmer():
-            for z in p["soner"]:
-                sone = self.soner.get(z["nr"])
-                rate = self.rate(sone) if sone else STD_FALLBACK_RATE
-                liter = z["min"] * rate
+            if p.get("soner"):
+                for z in p["soner"]:
+                    sone = self.soner.get(z["nr"])
+                    rate = self.rate(sone) if sone else STD_FALLBACK_RATE
+                    liter = z["min"] * rate
+                    sum_liter += liter
+                    rader.append({
+                        "program": p["navn"], "sone": z["navn"], "minutter": z["min"],
+                        "liter": round(liter), "rate": round(rate, 2),
+                        "kalibrert": bool(sone and sone.rate > 0),
+                    })
+            else:
+                liter = float(p.get("estimat_liter") or 0)
                 sum_liter += liter
-                rader.append({
-                    "program": p["navn"], "sone": z["navn"], "minutter": z["min"],
-                    "liter": round(liter), "rate": round(rate, 2),
-                    "kalibrert": bool(sone and sone.rate > 0),
-                })
+                rader.append({"program": p["navn"], "sone": "Hele programmet",
+                              "minutter": p.get("total_min", 0), "liter": round(liter),
+                              "rate": 0, "kalibrert": False})
         return {"liter": round(sum_liter), "kostnad": self.kostnad(sum_liter), "per_sone": rader}
+
+    def programliste(self) -> list[dict[str, Any]]:
+        """Programmene med historikk, til kortet."""
+        return [
+            {"navn": p.navn, "slug": p.slug, "bryter": p.bryter, "gaar": p.gaar, "start": p.start,
+             "soner": p.soner, "total_min": p.total_min, "dager": p.dager,
+             "kjoringer": p.kjoringer, "snitt_liter": p.snitt_liter,
+             "siste_liter": p.siste_liter, "siste_minutter": p.siste_minutter}
+            for p in sorted(self.programmer.values(), key=lambda x: x.navn.lower())
+        ]

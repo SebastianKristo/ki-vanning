@@ -3,19 +3,23 @@
     "step": {
       "user": {
         "title": "KI Vanning",
-        "description": "Fant OpenSprinkler: {prefiks}. Velg flow-sensoren fra vannmåleren. Adresse og passord er valgfritt, men gir programplan og estimat.",
+        "description": "Fant OpenSprinkler: {prefiks}. Velg flow-sensoren fra vannmåleren. Programplan og estimat leses fra OpenSprinkler-integrasjonen selv – adresse og passord trengs bare hvis du vil ha den nøyaktige programtabellen med minutter per sone.",
         "data": {
           "prefiks": "OpenSprinkler-prefiks",
           "flow": "Flow-sensor (L/min)",
-          "host": "OpenSprinkler-adresse",
-          "passord": "API-passord (md5)",
+          "host": "OpenSprinkler-adresse (valgfri)",
+          "passord": "API-passord (valgfri)",
           "pris": "Vannpris (kr/m³)",
           "min_flow": "Laveste flow som teller (L/min)"
         }
       }
     },
-    "error": { "fant_ikke_opensprinkler": "Fant ingen OpenSprinkler-entiteter. Skriv inn prefikset manuelt." },
-    "abort": { "already_configured": "Denne kontrolleren er allerede satt opp." }
+    "error": {
+      "fant_ikke_opensprinkler": "Fant ingen OpenSprinkler-entiteter. Skriv inn prefikset manuelt."
+    },
+    "abort": {
+      "already_configured": "Denne kontrolleren er allerede satt opp."
+    }
   },
   "options": {
     "step": {
@@ -23,8 +27,8 @@
         "title": "KI Vanning",
         "data": {
           "flow": "Flow-sensor (L/min)",
-          "host": "OpenSprinkler-adresse",
-          "passord": "API-passord (md5)",
+          "host": "OpenSprinkler-adresse (valgfri)",
+          "passord": "API-passord (valgfri)",
           "pris": "Vannpris (kr/m³)",
           "min_flow": "Laveste flow som teller (L/min)"
         }
