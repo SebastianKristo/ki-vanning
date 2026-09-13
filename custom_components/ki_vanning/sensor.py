@@ -342,6 +342,7 @@ class Oversikt(KiVanningEntitet, SensorEntity):
         return {
             ATTR_INTEGRASJON: DOMAIN, ATTR_TYPE: "oversikt",
             "modus": m.modus, "prefiks": m.oppsett.get("prefiks") or "",
+            "har_flyt": m.har_flyt, "felles_flyt": bool(m.oppsett.get("flow")),
             **({"planlegger": m.plan.status(),
                 "anlegg": m.oppsett.get("anlegg", True) is not False,
                 "regnpause": m.plan.regnpause_aktiv,

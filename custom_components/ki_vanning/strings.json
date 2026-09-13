@@ -13,7 +13,7 @@
         "description": "Fant OpenSprinkler: {prefiks}. Velg flow-sensoren fra vannmåleren. Programplan og estimat leses fra OpenSprinkler-integrasjonen selv.",
         "data": {
           "prefiks": "OpenSprinkler-prefiks",
-          "flow": "Flow-sensor (L/min)",
+          "flow": "Felles vannmåler (L/min) – la stå tom hvis sonene har hver sin, eller hvis du ikke har noen",
           "host": "OpenSprinkler-adresse (valgfri)",
           "passord": "API-passord (valgfri)",
           "pris": "Vannpris (kr/m³)",
@@ -63,7 +63,7 @@
       "innstillinger": {
         "title": "Innstillinger",
         "data": {
-          "flow": "Felles flow-sensor (valgfri)",
+          "flow": "Felles vannmåler (L/min) – la stå tom hvis sonene har hver sin, eller hvis du ikke har noen",
           "host": "OpenSprinkler-adresse (valgfri)",
           "passord": "API-passord (valgfri)",
           "pris": "Vannpris (kr/m³)",

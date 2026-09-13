@@ -38,7 +38,12 @@ def _finn_prefiks(hass) -> str | None:
 
 
 def _finn_flow(hass) -> str | None:
-    """Finner en sannsynlig flow-sensor (L/min)."""
+    """Finner en sannsynlig flow-sensor (L/min).
+
+    Brukes som forslag i teksten, ikke som forhåndsvalg. Å fylle feltet automatisk
+    ga et anlegg uten vannmåler en tilfeldig L/min-sensor som felles måler, og da
+    ble sonenes egne målere aldri brukt.
+    """
     for eid in hass.states.async_entity_ids("sensor"):
         st = hass.states.get(eid)
         if not st:
@@ -95,7 +100,7 @@ class KiVanningFlow(config_entries.ConfigFlow, domain=DOMAIN):
             self._data = {**user_input, CONF_MODUS: MODUS_VENTILER}
             return await self.async_step_sone()
         skjema = vol.Schema({
-            vol.Optional(CONF_FLOW, default=_finn_flow(self.hass) or ""): selector.EntitySelector(
+            vol.Optional(CONF_FLOW, default=""): selector.EntitySelector(
                 selector.EntitySelectorConfig(domain="sensor")),
             vol.Optional(CONF_PRIS, default=STD_PRIS): vol.Coerce(float),
         })
@@ -132,7 +137,7 @@ class KiVanningFlow(config_entries.ConfigFlow, domain=DOMAIN):
     async def async_step_opensprinkler(self, user_input: dict[str, Any] | None = None):
         feil: dict[str, str] = {}
         prefiks = _finn_prefiks(self.hass)
-        flow = _finn_flow(self.hass)
+        forslag = _finn_flow(self.hass)
 
         if user_input is not None:
             if not user_input.get(CONF_PREFIKS):
@@ -145,7 +150,7 @@ class KiVanningFlow(config_entries.ConfigFlow, domain=DOMAIN):
         skjema = vol.Schema(
             {
                 vol.Required(CONF_PREFIKS, default=prefiks or ""): str,
-                vol.Required(CONF_FLOW, default=flow or ""): selector.EntitySelector(
+                vol.Optional(CONF_FLOW, default=""): selector.EntitySelector(
                     selector.EntitySelectorConfig(domain="sensor")
                 ),
                 vol.Optional(CONF_HOST, default=""): str,
@@ -156,7 +161,8 @@ class KiVanningFlow(config_entries.ConfigFlow, domain=DOMAIN):
         )
         return self.async_show_form(
             step_id="opensprinkler", data_schema=skjema, errors=feil,
-            description_placeholders={"prefiks": prefiks or "ikke funnet"},
+            description_placeholders={"prefiks": prefiks or "ikke funnet",
+                                      "flyt_forslag": forslag or "ingen funnet"},
         )
 
     @staticmethod

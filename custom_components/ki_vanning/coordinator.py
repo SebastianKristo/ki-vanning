@@ -354,6 +354,15 @@ class KiVanningMotor:
         if self.plan:
             self.plan.sett_regnpause(timer)
 
+    @property
+    def har_flyt(self) -> bool:
+        """Finnes det en vannmåler i det hele tatt – felles eller på en sone?
+
+        Uten en slik sensor er alle literne estimater, og kortet skjuler
+        forbruksdelen i stedet for å vise tall som ser målte ut.
+        """
+        return bool(self.oppsett.get("flow")) or any(s.flow for s in self.soner.values())
+
     def _flow(self, sone: "Sone | None" = None) -> float:
         """Flow i L/min: sonens egen måler hvis den har en, ellers den felles."""
         id_ = (sone.flow if sone and sone.flow else None) or self.oppsett.get("flow")
