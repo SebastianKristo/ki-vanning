@@ -1,3 +1,21 @@
+# KI Vanning 3.1.1
+
+## «Entity is neither a valid entity ID nor a valid UUID»
+
+Min feil fra 3.1.0. Da jeg fjernet den automatiske utfyllingen av vannmåleren, satte jeg
+`default=""` på feltet — og tom streng er nettopp det `cv.entity_id_or_uuid` avviser.
+Valideringen skjer i flow-manageren før steget kjører, så hele skjemaet feilet med en
+gang det åpnet seg.
+
+Ingen `EntitySelector` har lenger en `default`. Lagrede verdier legges inn som
+`suggested_value` i stedet, slik resten av Home Assistant gjør det.
+
+Feltet i Innstillinger var i tillegg `Required` med tom standardverdi — altså påkrevd og
+ugyldig på samme tid. Det er `Optional` nå.
+
+Og tømmer du vannmåleren, blir den faktisk tømt: nøkkelen kommer ikke tilbake fra et tomt
+felt, så lagringen ville ellers beholdt den gamle verdien fra options.
+
 # KI Vanning 3.1.0
 
 ## Vannmåleren fylles ikke inn automatisk lenger

@@ -100,7 +100,9 @@ class KiVanningFlow(config_entries.ConfigFlow, domain=DOMAIN):
             self._data = {**user_input, CONF_MODUS: MODUS_VENTILER}
             return await self.async_step_sone()
         skjema = vol.Schema({
-            vol.Optional(CONF_FLOW, default=""): selector.EntitySelector(
+            # Ingen default her: en EntitySelector med tom streng avvises av
+            # cv.entity_id_or_uuid før steget i det hele tatt kjører.
+            vol.Optional(CONF_FLOW): selector.EntitySelector(
                 selector.EntitySelectorConfig(domain="sensor")),
             vol.Optional(CONF_PRIS, default=STD_PRIS): vol.Coerce(float),
         })
@@ -150,7 +152,7 @@ class KiVanningFlow(config_entries.ConfigFlow, domain=DOMAIN):
         skjema = vol.Schema(
             {
                 vol.Required(CONF_PREFIKS, default=prefiks or ""): str,
-                vol.Optional(CONF_FLOW, default=""): selector.EntitySelector(
+                vol.Optional(CONF_FLOW): selector.EntitySelector(
                     selector.EntitySelectorConfig(domain="sensor")
                 ),
                 vol.Optional(CONF_HOST, default=""): str,
@@ -275,11 +277,13 @@ class KiVanningOptions(config_entries.OptionsFlow):
     # ------------------------------------------------------------ innstillinger
     async def async_step_innstillinger(self, user_input: dict[str, Any] | None = None):
         if user_input is not None:
-            return self._lagre(user_input)
+            # Tømmer man vannmåleren, kommer nøkkelen ikke tilbake i det hele tatt.
+            # Uten dette ville _lagre() beholdt den gamle verdien fra options.
+            return self._lagre({CONF_FLOW: "", **user_input})
         d = self._alt()
         skjema = vol.Schema(
             {
-                vol.Required(CONF_FLOW, default=d.get(CONF_FLOW, "")): selector.EntitySelector(
+                vol.Optional(CONF_FLOW): selector.EntitySelector(
                     selector.EntitySelectorConfig(domain="sensor")
                 ),
                 vol.Optional(CONF_HOST, default=d.get(CONF_HOST, "")): str,
@@ -288,4 +292,6 @@ class KiVanningOptions(config_entries.OptionsFlow):
                 vol.Optional(CONF_MIN_FLOW, default=d.get(CONF_MIN_FLOW, STD_MIN_FLOW)): vol.Coerce(float),
             }
         )
-        return self.async_show_form(step_id="init", data_schema=skjema)
+        return self.async_show_form(
+            step_id="init",
+            data_schema=self.add_suggested_values_to_schema(skjema, d))
