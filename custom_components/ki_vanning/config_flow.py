@@ -190,7 +190,9 @@ class KiVanningOptions(config_entries.OptionsFlow):
         """Meny: hva vil du endre?"""
         d = self._alt()
         if d.get("modus") != MODUS_VENTILER:
-            return await self.async_step_innstillinger()
+            # Svaret må sendes videre. Uten user_input her ble skjemaet bare vist på
+            # nytt når du trykket Send, og ingenting ble lagret.
+            return await self.async_step_innstillinger(user_input)
         return self.async_show_menu(step_id="init", menu_options=["innstillinger", "programmer", "ventiler_endre"])
 
     # ------------------------------------------------------------ programmer
@@ -279,7 +281,8 @@ class KiVanningOptions(config_entries.OptionsFlow):
         if user_input is not None:
             # Tømmer man vannmåleren, kommer nøkkelen ikke tilbake i det hele tatt.
             # Uten dette ville _lagre() beholdt den gamle verdien fra options.
-            return self._lagre({CONF_FLOW: "", **user_input})
+            # Samme for hovedventilen: tømmes feltet, skal den ikke styres lenger.
+            return self._lagre({CONF_FLOW: "", "master_ventil": "", **user_input})
         d = self._alt()
         skjema = vol.Schema(
             {
@@ -290,8 +293,21 @@ class KiVanningOptions(config_entries.OptionsFlow):
                 vol.Optional(CONF_PASSORD, default=d.get(CONF_PASSORD, "")): str,
                 vol.Optional(CONF_PRIS, default=d.get(CONF_PRIS, STD_PRIS)): vol.Coerce(float),
                 vol.Optional(CONF_MIN_FLOW, default=d.get(CONF_MIN_FLOW, STD_MIN_FLOW)): vol.Coerce(float),
+                # Hovedventil: åpnes hver gang en sone starter.
+                vol.Optional("master_ventil"): selector.EntitySelector(
+                    selector.EntitySelectorConfig(domain=["switch", "valve", "input_boolean"])),
+                vol.Optional("master_steng", default=d.get("master_steng", False)): bool,
+                # Varsler: hvilke telefoner, og hvor lenge vann kan renne uten sone.
+                vol.Optional("varsel_til", default=d.get("varsel_til") or []): selector.SelectSelector(
+                    selector.SelectSelectorConfig(
+                        options=sorted(self.hass.services.async_services().get("notify", {}).keys()),
+                        multiple=True, custom_value=True, mode=selector.SelectSelectorMode.DROPDOWN)),
+                vol.Optional("varsel_vann_min", default=d.get("varsel_vann_min", 30)): selector.NumberSelector(
+                    selector.NumberSelectorConfig(min=5, max=240, step=5, mode="box", unit_of_measurement="min")),
             }
         )
+        # Skjemaet er sitt eget steg. Med step_id="init" gikk innsendingen til menyen
+        # i ventilmodus, som viste menyen igjen i stedet for å lagre.
         return self.async_show_form(
-            step_id="init",
+            step_id="innstillinger",
             data_schema=self.add_suggested_values_to_schema(skjema, d))

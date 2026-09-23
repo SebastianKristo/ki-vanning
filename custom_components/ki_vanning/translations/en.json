@@ -58,6 +58,12 @@
           "innstillinger": "Innstillinger",
           "programmer": "Programmer",
           "ventiler_endre": "Ventiler"
+        },
+        "data": {
+          "varsel_til": "Send notifications to",
+          "varsel_vann_min": "Notify when water runs without a zone for more than",
+          "master_ventil": "Master valve – opened every time a zone starts",
+          "master_steng": "Close the master valve when watering is done"
         }
       },
       "innstillinger": {
@@ -68,7 +74,11 @@
           "passord": "API-passord (valgfri)",
           "pris": "Vannpris (kr/m³)",
           "min_flow": "Laveste flow som teller (L/min)",
-          "ferie_faktor": "Ganger vanningstiden i ferie"
+          "ferie_faktor": "Ganger vanningstiden i ferie",
+          "varsel_til": "Send notifications to",
+          "varsel_vann_min": "Notify when water runs without a zone for more than",
+          "master_ventil": "Master valve – opened every time a zone starts",
+          "master_steng": "Close the master valve when watering is done"
         }
       },
       "programmer": {

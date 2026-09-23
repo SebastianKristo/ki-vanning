@@ -1,7 +1,7 @@
 {
   "domain": "ki_vanning",
   "name": "KI Vanning",
-  "version": "3.1.1",
+  "version": "3.3.0",
   "documentation": "https://github.com/SebastianKristo/ki-vanning",
   "issue_tracker": "https://github.com/SebastianKristo/ki-vanning/issues",
   "codeowners": [

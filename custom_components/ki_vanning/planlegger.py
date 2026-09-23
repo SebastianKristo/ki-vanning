@@ -175,6 +175,9 @@ class Planlegger:
             j.start = nå
             j.slutt = nå + timedelta(minutes=j.minutter)
             self.parallelle.append(j)
+        # Hovedventilen først, så sonene: da står det vann klart i det de åpner.
+        await self.motor.master_pa()
+        for j in jobber:
             await self.hass.services.async_call("homeassistant", "turn_on", {"entity_id": j.entity}, blocking=False)
             async_track_point_in_time(self.hass, self._stopp_en(j), dt_util.as_utc(j.slutt))
         self.naa = max(jobber, key=lambda x: x.slutt)      # heroen viser den som varer lengst
@@ -225,6 +228,7 @@ class Planlegger:
         jobb.start = dt_util.now()
         jobb.slutt = jobb.start + timedelta(minutes=jobb.minutter)
         self.naa = jobb
+        await self.motor.master_pa()
         await self.hass.services.async_call("homeassistant", "turn_on", {"entity_id": jobb.entity}, blocking=False)
         self._timer = async_track_point_in_time(self.hass, self._ferdig, dt_util.as_utc(jobb.slutt))
         self.motor._varsle()

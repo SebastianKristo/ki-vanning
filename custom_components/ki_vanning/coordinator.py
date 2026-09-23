@@ -17,14 +17,22 @@ import aiohttp
 import async_timeout
 
 from homeassistant.core import HomeAssistant, State, callback
-from homeassistant.helpers.event import async_track_state_change_event, async_track_time_interval
+from homeassistant.helpers.event import (
+    async_call_later,
+    async_track_state_change_event,
+    async_track_time_interval,
+)
 from homeassistant.helpers.storage import Store
 from homeassistant.util import dt as dt_util
 
 from .planlegger import Planlegger
+from .varsler import Varsler
 from .const import (
     ATTR_INTEGRASJON,
+    CONF_MASTER,
+    CONF_MASTER_STENG,
     DOMAIN,
+    MASTER_STENG_SEK,
     MODUS_VENTILER,
     LAGER_NOKKEL,
     LAGER_VERSJON,
@@ -117,6 +125,11 @@ class KiVanningMotor:
         self.plan = Planlegger(hass, self) if self.modus == MODUS_VENTILER else None
         self._lager = Store(hass, LAGER_VERSJON, f"{LAGER_NOKKEL}_{oppsett.get('prefiks') or 'ventiler'}")
         self._lyttere: list[Any] = []
+        self.varsler = Varsler(self)
+        # Hovedventil: hvor mange ganger den er åpnet igjen for sonen som går nå, og
+        # timeren som stenger den når vanningen er ferdig.
+        self._master_forsok: dict[int, int] = {}
+        self._master_steng_av = None
 
     # ------------------------------------------------------------------ oppsett
     async def start(self) -> None:
@@ -128,7 +141,11 @@ class KiVanningMotor:
             self._finn_programmer()
         self._lytter.append(async_track_time_interval(self.hass, self._tikk, TIKK))
         self._lytter.append(async_track_time_interval(self.hass, self._hent_plan, PLAN_INTERVALL))
-        fulgte = [x for x in ([self.oppsett.get("flow")]
+        # Regnpausen i OpenSprinkler følges også, så varselet kommer med en gang
+        # og ikke først ved neste tikk.
+        regn_os = [f"binary_sensor.{self.oppsett['prefiks']}_rain_delay_active"] \
+            if not self.plan and self.oppsett.get("prefiks") else []
+        fulgte = [x for x in (regn_os + [self.oppsett.get("flow"), self.master]
                               + [s.gaar for s in self.soner.values()]
                               + [s.flow for s in self.soner.values()]
                               + [p.gaar for p in self.programmer.values()]) if x]
@@ -156,6 +173,12 @@ class KiVanningMotor:
         return av
 
     def _varsle(self) -> None:
+        # Varslene ser på den samme tilstanden som entitetene. En feil der skal aldri
+        # hindre at entitetene oppdateres.
+        try:
+            self.varsler.sjekk()
+        except Exception:  # noqa: BLE001
+            _LOGGER.exception("KI Vanning: varslene feilet")
         for cb in list(self._lyttere):
             cb()
 
@@ -379,7 +402,103 @@ class KiVanningMotor:
     @callback
     def _endring(self, hendelse) -> None:
         self._akkumuler()
+        self._folg_master(hendelse)
         self._varsle()
+
+    # ------------------------------------------------------------ hovedventil
+    @property
+    def master(self) -> str | None:
+        return self.oppsett.get(CONF_MASTER) or None
+
+    def _master_apen(self) -> bool:
+        st = self.hass.states.get(self.master) if self.master else None
+        return bool(st and st.state in ("on", "open", "opening"))
+
+    async def master_pa(self) -> None:
+        """Åpner hovedventilen hvis den er stengt. Ventiler i valve-domenet åpnes med
+        open_valve, alt annet (switch, input_boolean) med turn_on."""
+        m = self.master
+        if not m:
+            return
+        if self._master_steng_av:
+            self._master_steng_av()
+            self._master_steng_av = None
+        if self._master_apen():
+            return
+        try:
+            if m.startswith("valve."):
+                await self.hass.services.async_call("valve", "open_valve", {"entity_id": m}, blocking=True)
+            else:
+                await self.hass.services.async_call("homeassistant", "turn_on", {"entity_id": m}, blocking=True)
+        except Exception as err:  # noqa: BLE001 – vanningen skal gå selv om hovedventilen svikter
+            _LOGGER.warning("KI Vanning: fikk ikke åpnet hovedventilen %s: %s", m, err)
+
+    async def master_av(self) -> None:
+        m = self.master
+        if not m or not self._master_apen():
+            return
+        try:
+            if m.startswith("valve."):
+                await self.hass.services.async_call("valve", "close_valve", {"entity_id": m}, blocking=True)
+            else:
+                await self.hass.services.async_call("homeassistant", "turn_off", {"entity_id": m}, blocking=True)
+        except Exception as err:  # noqa: BLE001
+            _LOGGER.warning("KI Vanning: fikk ikke stengt hovedventilen %s: %s", m, err)
+
+    def _vanning_pagar(self) -> bool:
+        """Går en sone, eller står det flere i kø hos planleggeren?"""
+        if self.aktiv():
+            return True
+        p = self.plan
+        return bool(p and (p.naa or p.koe or getattr(p, "parallelle", None)))
+
+    @callback
+    def _folg_master(self, hendelse) -> None:
+        """Hovedventilen følger sonene.
+
+        Sonoff-ventilen stenger seg selv når det ikke har gått vann på en stund. Mellom
+        to soner, eller når en sone slås på for hånd, kan den altså stå stengt. Derfor:
+
+        * hver gang en sone slår seg på, åpnes hovedventilen
+        * stenger den seg mens en sone går, åpnes den igjen – men bare én gang per
+          sone. Stenger den igjen, er det trolig fordi det ikke kommer vann, og da
+          er det varselet om manglende vannføring som skal si fra, ikke en løkke
+        * med «steng når ferdig» stenges den 15 s etter at siste sone er av, så en
+          sone som følger rett etter ikke rekker å møte en lukket ventil
+        """
+        m = self.master
+        if not m or hendelse is None:
+            return
+        eid = hendelse.data.get("entity_id")
+        ny = hendelse.data.get("new_state")
+        gammel = hendelse.data.get("old_state")
+        pa = bool(ny and ny.state == "on")
+        var_pa = bool(gammel and gammel.state == "on")
+        soner = {s.gaar: s for s in self.soner.values() if s.gaar}
+
+        if eid in soner and pa and not var_pa:
+            self._master_forsok[soner[eid].nr] = 0
+            self.hass.async_create_task(self.master_pa())
+            return
+
+        if eid == m and ny and ny.state in ("off", "closed", "closing") and self.aktiv():
+            s = self.aktiv()
+            if self._master_forsok.get(s.nr, 0) < 1:
+                self._master_forsok[s.nr] = self._master_forsok.get(s.nr, 0) + 1
+                _LOGGER.info("KI Vanning: hovedventilen stengte mens %s går – åpner den igjen", s.navn)
+                self.hass.async_create_task(self.master_pa())
+            return
+
+        if eid in soner and not pa and var_pa and self.oppsett.get(CONF_MASTER_STENG):
+            if self._master_steng_av:
+                self._master_steng_av()
+            self._master_steng_av = async_call_later(self.hass, MASTER_STENG_SEK, self._kanskje_steng)
+
+    @callback
+    def _kanskje_steng(self, _nå) -> None:
+        self._master_steng_av = None
+        if not self._vanning_pagar():
+            self.hass.async_create_task(self.master_av())
 
     @callback
     def _tikk(self, _nå) -> None:
@@ -491,6 +610,7 @@ class KiVanningMotor:
     async def _les_lager(self) -> None:
         data = await self._lager.async_load() or {}
         self._anker = data.get("anker", {})
+        self.varsler.les(data.get("varsel"))
         for rad in data.get("soner", []):
             nr = rad.get("nr")
             s = self.hageslange if nr == 0 else self.soner.get(nr) or Sone(nr=nr, slug=rad.get("slug", ""), navn=rad.get("navn", ""))
@@ -508,6 +628,7 @@ class KiVanningMotor:
         await self._lager.async_save(
             {
                 "anker": self._anker,
+                "varsel": self.varsler.lagre(),
                 "soner": [
                     {
                         "nr": s.nr, "slug": s.slug, "navn": s.navn,

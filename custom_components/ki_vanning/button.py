@@ -15,7 +15,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, add: AddEnt
     ut = [Nullstill(motor, "alt", "Nullstill alt"),
           Nullstill(motor, "forbruk", "Nullstill forbruk"),
           Nullstill(motor, "kalibrering", "Nullstill kalibrering"),
-          HentPlan(motor)]
+          HentPlan(motor), TestVarsel(motor)]
     if motor.plan:
         ut += [StoppAlt(motor), Regn(motor, 24), Regn(motor, 48), NullstillRegn(motor)]
     add(ut)
@@ -34,6 +34,22 @@ class Nullstill(KiVanningEntitet, ButtonEntity):
 
     async def async_press(self) -> None:
         await self.motor.nullstill(self.hva)
+
+
+class TestVarsel(KiVanningEntitet, ButtonEntity):
+    """Sender et eksempelvarsel til mottakerne, uansett bryterne."""
+
+    _attr_icon = "mdi:bell-ring-outline"
+
+    def __init__(self, motor) -> None:
+        super().__init__(motor, "test_varsel", "Test varsel")
+
+    @property
+    def extra_state_attributes(self) -> dict:
+        return {ATTR_INTEGRASJON: DOMAIN, ATTR_TYPE: "test_varsel"}
+
+    async def async_press(self) -> None:
+        self.motor.varsler.test()
 
 
 class HentPlan(KiVanningEntitet, ButtonEntity):

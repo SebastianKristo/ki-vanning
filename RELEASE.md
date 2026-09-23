@@ -1,42 +1,39 @@
-# KI Vanning 3.1.1
+# KI Vanning 3.3.0
 
-## «Entity is neither a valid entity ID nor a valid UUID»
+## Hovedventil som åpnes hver gang en sone starter
 
-Min feil fra 3.1.0. Da jeg fjernet den automatiske utfyllingen av vannmåleren, satte jeg
-`default=""` på feltet — og tom streng er nettopp det `cv.entity_id_or_uuid` avviser.
-Valideringen skjer i flow-manageren før steget kjører, så hele skjemaet feilet med en
-gang det åpnet seg.
+Sonoff-ventilen stenger seg selv når det ikke har gått vann på en stund. Mellom to soner i et program,
+eller når en sone slås på for hånd, kan den altså stå stengt — og da kommer det ikke vann.
 
-Ingen `EntitySelector` har lenger en `default`. Lagrede verdier legges inn som
-`suggested_value` i stedet, slik resten av Home Assistant gjør det.
+Velg **Hovedventil** under **Konfigurer → Innstillinger**. Den kan være en `switch`, en `valve` eller en
+`input_boolean`.
 
-Feltet i Innstillinger var i tillegg `Required` med tom standardverdi — altså påkrevd og
-ugyldig på samme tid. Det er `Optional` nå.
+- **Hver gang en sone slår seg på, åpnes hovedventilen.** I begge modiene, og uansett hva som slo
+  sonen på: et program, kortet, en tjeneste eller en bryter rett i Home Assistant.
+- **Med egne ventiler åpnes den først**, før sonen, så vannet står klart i det sonen åpner. Også når
+  sonene går samtidig.
+- **Stenger den mens en sone går, åpnes den igjen — én gang per sone.** Stenger den på nytt, kommer det
+  trolig ikke vann. Da får den stå, og det er varselet om manglende vannføring fra 3.2.0 som sier fra,
+  i stedet for at ventilen åpnes og lukkes i en løkke.
+- **Steng når ferdig** (valgfritt, av som standard): hovedventilen stenges 15 s etter at siste sone er
+  av. Ventetiden er der så en sone som følger rett etter, ikke møter en lukket ventil; så lenge
+  planleggeren har flere soner i kø, stenges den ikke.
+- En `valve`-entitet åpnes med `valve.open_valve` og stenges med `valve.close_valve`; alt annet med
+  `turn_on`/`turn_off`.
+- Svikter hovedventilen, går vanningen likevel, og feilen havner i loggen.
 
-Og tømmer du vannmåleren, blir den faktisk tømt: nøkkelen kommer ikke tilbake fra et tomt
-felt, så lagringen ville ellers beholdt den gamle verdien fra options.
+Tømmer du feltet i innstillingene, slutter integrasjonen å styre ventilen.
 
-# KI Vanning 3.1.0
+### Kontrollert
 
-## Vannmåleren fylles ikke inn automatisk lenger
+Kjørt med Python 3.13.15 og Home Assistant 2025.12.5, med kjøretidsadvarsler som feil.
 
-`_finn_flow()` lette gjennom alle sensorer etter en med enheten L/min og satte den som
-**standardverdi** i oppsettet. Har du ikke vannmåler på anlegget, men en eller annen
-L/min-sensor i huset, ble den plukket som felles måler — og da ble sonenes egne målere
-aldri brukt, siden `_flow()` bare faller tilbake på den felles når sonen mangler sin egen.
+- `tests/test_hovedventil.py` — 9 nye tester: hovedventilen åpnes før sonen i et program; også ved
+  neste sone etter at den har stengt seg selv; når en sone slås på rett i HA; åpnes igjen bare én gang
+  når den stenger midt i; `valve`-domenet med `open_valve`; stenging når ferdig; ingen stenging når neste
+  sone følger rett etter; ingenting ekstra uten hovedventil; og en OpenSprinkler-stasjon som starter.
+- `tests/smoke_setup.py` — egne ventiler lastet gjennom Home Assistants egen laster med hovedventil:
+  en sone slås på, og hovedventilen åpnes.
+- Alle 27 tester og innlastingstesten går, også fra zip-en.
 
-Feltet står nå tomt. Lar du det stå tomt, brukes sonenes egne målere. Forslaget fra
-automatikken vises fortsatt i teksten, men fyller ikke inn noe.
-
-Feltet er også `Optional` i OpenSprinkler-steget nå; det var `Required` med en
-forhåndsutfylt verdi, så det var vanskelig å komme videre uten å velge noe.
-
-## `har_flyt` i oversikten
-
-Oversiktssensoren har fått to nye attributter:
-
-* `har_flyt` – finnes det en vannmåler i det hele tatt, felles eller på en sone
-* `felles_flyt` – er det satt en felles måler
-
-`ki-vanning-card` 3.5.0 bruker `har_flyt` til å skjule forbruksdelen når det ikke finnes
-noen måler, i stedet for å vise estimater som ser ut som målinger.
+Ikke testet mot den ekte Sonoff-ventilen.

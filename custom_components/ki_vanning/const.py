@@ -16,6 +16,9 @@ CONF_SONER = "soner"              # egne ventiler: [{entity, navn, ikon}]
 CONF_PROGRAMMER = "programmer"    # [{navn, dager, tid, soner:[{entity,min}], aktiv}]
 CONF_ANLEGG = "anlegg"            # hovedbryter: av stopper alt
 CONF_REGNPAUSE = "regnpause"      # timer med pause
+CONF_MASTER = "master_ventil"     # hovedventil som åpnes hver gang en sone starter
+CONF_MASTER_STENG = "master_steng"  # steng hovedventilen når vanningen er ferdig
+MASTER_STENG_SEK = 15             # vent så lenge før den stenges – neste sone kan være på vei
 
 MODUS_OS = "opensprinkler"
 MODUS_VENTILER = "ventiler"

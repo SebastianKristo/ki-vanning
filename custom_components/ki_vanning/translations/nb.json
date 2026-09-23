@@ -58,6 +58,12 @@
           "innstillinger": "Innstillinger",
           "programmer": "Programmer",
           "ventiler_endre": "Ventiler"
+        },
+        "data": {
+          "varsel_til": "Send varsler til",
+          "varsel_vann_min": "Si fra når vann renner uten sone i mer enn",
+          "master_ventil": "Hovedventil – åpnes hver gang en sone starter",
+          "master_steng": "Steng hovedventilen når vanningen er ferdig"
         }
       },
       "innstillinger": {
@@ -68,7 +74,11 @@
           "passord": "API-passord (valgfri)",
           "pris": "Vannpris (kr/m³)",
           "min_flow": "Laveste flow som teller (L/min)",
-          "ferie_faktor": "Ganger vanningstiden i ferie"
+          "ferie_faktor": "Ganger vanningstiden i ferie",
+          "varsel_til": "Send varsler til",
+          "varsel_vann_min": "Si fra når vann renner uten sone i mer enn",
+          "master_ventil": "Hovedventil – åpnes hver gang en sone starter",
+          "master_steng": "Steng hovedventilen når vanningen er ferdig"
         }
       },
       "programmer": {

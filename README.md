@@ -97,6 +97,50 @@ Per sone (og for hageslangen): `forbruk`, `forbruk i dag / uken / måneden / år
 `planlagt i dag`, `neste vanning`, `aktiv sone`, `oversikt`, `hageslange i bruk`, `vanner nå`,
 `number.vannpris` og knapper for å nullstille tellere eller hente programplanen på nytt.
 
+## Hovedventil
+
+Velg **Hovedventil** under **Konfigurer → Innstillinger** — en `switch`, `valve` eller
+`input_boolean`. Den åpnes hver gang en sone slår seg på, i begge modiene, også når sonen slås på for
+hånd rett i Home Assistant. Med egne ventiler åpnes den *før* sonen, så vannet står klart.
+
+Laget for ventiler som stenger seg selv når det ikke har gått vann på en stund, som Sonoff-ventilen:
+
+- mellom to soner i et program kan den ha stengt — den åpnes igjen når neste sone starter
+- stenger den mens en sone går, åpnes den igjen, men bare **én** gang per sone. Stenger den på nytt,
+  kommer det trolig ikke vann, og da er det varselet om manglende vannføring som sier fra
+- **Steng hovedventilen når vanningen er ferdig** stenger den 15 s etter at siste sone er av, så en
+  sone som følger rett etter ikke møter en lukket ventil. Av som standard — ventilen stenger seg selv
+
+## Varsler
+
+Varsler til telefonen, i begge modiene. Velg telefonene under **Konfigurer → Innstillinger → Send
+varsler til** — alle `notify`-tjenestene står i lista.
+
+| Bryter | Varsler når | Standard |
+|---|---|---|
+| `switch.ki_vanning_varsler` | Hovedbryter for alle under | på |
+| `switch.ki_vanning_varsel_program` | Et program starter, og når det er ferdig — med tid, liter og kroner | på |
+| `switch.ki_vanning_varsel_hver_sone` | Hver sone starter og er ferdig | av |
+| `switch.ki_vanning_varsel_regnpause` | Regnpause settes, og når den er over | på |
+| `switch.ki_vanning_varsel_vann_renner` | Vann renner uten at noen sone går, lenger enn grensen (30 min) | på |
+| `switch.ki_vanning_varsel_ingen_vannforing` | En sone har gått i 3 min uten at det kommer vann | på |
+
+De to siste finnes bare når anlegget har vannmåler — uten måler kan de aldri slå til. Begge er
+tidskritiske varsler, som når gjennom Fokus på iPhone.
+
+Varslene ser på tilstanden motoren alt holder styr på og sammenligner med forrige gang, så de virker
+likt for OpenSprinkler og egne ventiler. En omstart midt i en vanning gir ikke «Vanning startet».
+Bryterne huskes over omstart. **Test varsel**-knappen sender et eksempel, uansett bryterne.
+
+## Tester
+
+```bash
+python -m unittest discover -s tests      # 27 tester: varsler, innstillinger og hovedventil
+python tests/smoke_setup.py               # laster integrasjonen gjennom Home Assistant, begge modiene
+```
+
+Krever Home Assistant 2025.12 eller nyere.
+
 ## Tjenester
 
 - `ki_vanning.nullstill` – `hva: alt | forbruk | kalibrering`
