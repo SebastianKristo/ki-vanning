@@ -130,6 +130,9 @@ class KiVanningMotor:
         # timeren som stenger den når vanningen er ferdig.
         self._master_forsok: dict[int, int] = {}
         self._master_steng_av = None
+        # Hva som sist skjedde med hovedventilen – vises i oversikten, så det går an å se
+        # hvorfor den står stengt (aldri forsøkt, feil fra tjenesten, eller stengt av seg selv).
+        self.master_logg: dict[str, Any] = {}
 
     # ------------------------------------------------------------------ oppsett
     async def start(self) -> None:
@@ -312,6 +315,12 @@ class KiVanningMotor:
     async def kjor_sone(self, entity: str, minutter: float) -> None:
         if self.plan:
             await self.plan.kjor_sone(entity, minutter)
+            return
+        # OpenSprinkler: åpne hovedventilen først, så starte stasjonen. Da er ventilen åpen
+        # før vannet skal komme, i stedet for å åpnes etter at sonen allerede har startet.
+        await self.master_pa()
+        await self.hass.services.async_call("opensprinkler", "run_station",
+                                            {"entity_id": entity, "run_seconds": int(round(minutter * 60))}, blocking=True)
 
     async def kjor_program(self, navn: str) -> None:
         if self.plan:
@@ -440,14 +449,35 @@ class KiVanningMotor:
             self._master_steng_av()
             self._master_steng_av = None
         if self._master_apen():
+            self.master_logg = {**self.master_logg, "siste": "var allerede åpen", "tid": dt_util.now().isoformat()}
             return
+        st = self.hass.states.get(m)
+        if st is None or st.state in ("unavailable", "unknown"):
+            self.master_logg = {"siste": "utilgjengelig", "tid": dt_util.now().isoformat(),
+                                "feil": f"{m} er {'ikke funnet' if st is None else st.state}"}
+            _LOGGER.warning("KI Vanning: hovedventilen %s er %s – kan ikke åpnes", m, "ikke funnet" if st is None else st.state)
+            self._varsle()
+            return
+        _LOGGER.info("KI Vanning: åpner hovedventilen %s", m)
         try:
             if m.startswith("valve."):
                 await self.hass.services.async_call("valve", "open_valve", {"entity_id": m}, blocking=True)
             else:
                 await self.hass.services.async_call("homeassistant", "turn_on", {"entity_id": m}, blocking=True)
+            self.master_logg = {"siste": "åpnet", "tid": dt_util.now().isoformat()}
         except Exception as err:  # noqa: BLE001 – vanningen skal gå selv om hovedventilen svikter
+            self.master_logg = {"siste": "feil", "tid": dt_util.now().isoformat(), "feil": str(err)}
             _LOGGER.warning("KI Vanning: fikk ikke åpnet hovedventilen %s: %s", m, err)
+        self._varsle()
+
+    def master_status(self) -> dict[str, Any] | None:
+        """Hovedventilen slik oversikten viser den."""
+        m = self.master
+        if not m:
+            return None
+        st = self.hass.states.get(m)
+        return {"entity": m, "tilstand": st.state if st else "ikke funnet", "apen": self._master_apen(),
+                "stengt_mens_sone_gaar": bool(self.aktiv()) and not self._master_apen(), **self.master_logg}
 
     async def master_av(self) -> None:
         m = self.master

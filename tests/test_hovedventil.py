@@ -209,6 +209,34 @@ class OpenSprinkler(Grunnlag):
         await self.hass.async_block_till_done()
         self.assertEqual(self.hass.states.get("switch.hovedventil").state, "on")
 
+    async def test_kjor_apner_hovedventilen_for_stasjonen_starter(self):
+        """Startes sonen gjennom KI Vanning (som kortet gjør), åpnes hovedventilen først."""
+        async def run_station(call):
+            self.kall.append(("run_station", call.data["entity_id"]))
+        self.hass.services.async_register("opensprinkler", "run_station", run_station)
+        self.hass.states.async_set(f"switch.{P}_s01_plen_station_enabled", "on", {"friendly_name": "S01 Plen Station Enabled"})
+        self.hass.states.async_set(f"binary_sensor.{P}_s01_plen_station_running", "off")
+        self.hass.states.async_set("switch.hovedventil", "off")
+        m = KiVanningMotor(self.hass, {"modus": "opensprinkler", "prefiks": P, "master_ventil": "switch.hovedventil"})
+        await m.start()
+        self.motorer.append(m)
+        await m.kjor_sone(f"switch.{P}_s01_plen_station_enabled", 5)
+        await self.hass.async_block_till_done()
+        rekke = [h for h, _ in self.kall]
+        self.assertLess(rekke.index("pa"), rekke.index("run_station"))
+        self.assertEqual(m.master_status()["siste"], "åpnet")
+
+    async def test_status_sier_fra_om_ventilen_mangler(self):
+        self.hass.states.async_set(f"switch.{P}_s01_plen_station_enabled", "on", {"friendly_name": "S01 Plen Station Enabled"})
+        self.hass.states.async_set(f"binary_sensor.{P}_s01_plen_station_running", "on")
+        m = KiVanningMotor(self.hass, {"modus": "opensprinkler", "prefiks": P, "master_ventil": "switch.finnes_ikke"})
+        await m.start()
+        self.motorer.append(m)
+        await m.master_pa()
+        st = m.master_status()
+        self.assertEqual(st["siste"], "utilgjengelig")
+        self.assertTrue(st["stengt_mens_sone_gaar"])
+
 
 if __name__ == "__main__":
     unittest.main()

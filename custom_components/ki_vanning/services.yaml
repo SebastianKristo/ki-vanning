@@ -109,3 +109,7 @@ sett_anlegg:
     pa:
       name: På
       selector: { boolean: }
+
+apne_hovedventil:
+  name: Åpne hovedventilen
+  description: Åpner hovedventilen nå.

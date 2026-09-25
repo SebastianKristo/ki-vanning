@@ -30,8 +30,13 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         sone = call.data.get("sone")
         minutter = float(call.data.get("minutter") or 10)
         for m in list(hass.data[DOMAIN].values()):
-            if m.plan and (m.sone_for(sone) or not sone):
+            if m.soner and (m.sone_for(sone) or not sone):
                 await m.kjor_sone(sone or next(iter(m.soner.values())).bryter, minutter)
+
+    async def apne_hovedventil(call: ServiceCall) -> None:
+        """Åpner hovedventilen nå (knappen i kortet når den står stengt mens en sone går)."""
+        for m in list(hass.data[DOMAIN].values()):
+            await m.master_pa()
 
     async def kjor_program(call: ServiceCall) -> None:
         for m in list(hass.data[DOMAIN].values()):
@@ -69,6 +74,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     hass.services.async_register(DOMAIN, "nullstill", nullstill)
     hass.services.async_register(DOMAIN, "hent_plan", hent_plan)
     hass.services.async_register(DOMAIN, "kjor", kjor)
+    hass.services.async_register(DOMAIN, "apne_hovedventil", apne_hovedventil)
     hass.services.async_register(DOMAIN, "kjor_program", kjor_program)
     hass.services.async_register(DOMAIN, "stopp", stopp)
     hass.services.async_register(DOMAIN, "sett_regnpause", sett_regnpause)
