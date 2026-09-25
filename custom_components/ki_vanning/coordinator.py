@@ -16,10 +16,10 @@ from typing import Any
 import aiohttp
 import async_timeout
 
+from homeassistant.const import EVENT_STATE_CHANGED
 from homeassistant.core import HomeAssistant, State, callback
 from homeassistant.helpers.event import (
     async_call_later,
-    async_track_state_change_event,
     async_track_time_interval,
 )
 from homeassistant.helpers.storage import Store
@@ -145,13 +145,14 @@ class KiVanningMotor:
         # og ikke først ved neste tikk.
         regn_os = [f"binary_sensor.{self.oppsett['prefiks']}_rain_delay_active"] \
             if not self.plan and self.oppsett.get("prefiks") else []
-        fulgte = [x for x in (regn_os + [self.oppsett.get("flow"), self.master]
-                              + [s.gaar for s in self.soner.values()]
-                              + [s.flow for s in self.soner.values()]
-                              + [p.gaar for p in self.programmer.values()]) if x]
-        if not fulgte:
-            fulgte = ["sensor.ki_vanning_finnes_ikke"]
-        self._lytter.append(async_track_state_change_event(self.hass, fulgte, self._endring))
+        self._regn_os = regn_os
+        # Hvilke entiteter som følges, regnes ut på nytt ved hver hendelse. Før var lista
+        # fast fra oppstart: startet Home Assistant KI Vanning før OpenSprinkler var lastet,
+        # fantes ingen soner da – og en sone som startet senere, åpnet aldri hovedventilen.
+        # Hendelsen behandles på neste runde i løkka, som med den gamle lytteren, så en
+        # tjeneste som slår av og på i samme øyeblikk rekker å bli ferdig først.
+        self._lytter.append(self.hass.bus.async_listen(
+            EVENT_STATE_CHANGED, self._endring_senere, event_filter=self._er_fulgt))
         await self._hent_plan(None)
 
     async def stopp(self) -> None:
@@ -198,7 +199,8 @@ class KiVanningMotor:
             nr, hale = int(traff.group(1)), traff.group(2)
             st = self.hass.states.get(eid)
             fn = (st.attributes.get("friendly_name") or "") if st else ""
-            tekst = re.sub(r"^S\d\d\s*", "", fn)
+            # Nyere OpenSprinkler setter enhetsnavnet foran: «OpenSprinkler S01 Garasje/Roser …»
+            tekst = re.sub(r"^.*?\bS\d\d\b\s*", "", fn)
             tekst = re.sub(r"\s*Station Enabled$", "", tekst, flags=re.I).strip()
             ubrukt = not tekst or re.fullmatch(r"S?\d+", tekst) is not None
             deler = [d.strip() for d in tekst.split("·")]
@@ -398,6 +400,20 @@ class KiVanningMotor:
             return 0.0
         return v if v >= self.oppsett.get("min_flow", 0.3) else 0.0
 
+    def _fulgte(self) -> set[str]:
+        return {x for x in (list(getattr(self, "_regn_os", [])) + [self.oppsett.get("flow"), self.master]
+                            + [s.gaar for s in self.soner.values()]
+                            + [s.flow for s in self.soner.values()]
+                            + [p.gaar for p in self.programmer.values()]) if x}
+
+    @callback
+    def _endring_senere(self, hendelse) -> None:
+        self.hass.loop.call_soon(self._endring, hendelse)
+
+    @callback
+    def _er_fulgt(self, data) -> bool:
+        return data.get("entity_id") in self._fulgte()
+
     # ------------------------------------------------------------------ måling
     @callback
     def _endring(self, hendelse) -> None:
@@ -502,6 +518,13 @@ class KiVanningMotor:
 
     @callback
     def _tikk(self, _nå) -> None:
+        # Sikkerhetsnett: går en sone mens hovedventilen står stengt (en hendelse som ble
+        # borte, eller sonen startet før KI Vanning var klar), åpnes den – én gang per sone.
+        s = self.aktiv()
+        if s and self.master and not self._master_apen() and self._master_forsok.get(s.nr, 0) < 1:
+            self._master_forsok[s.nr] = self._master_forsok.get(s.nr, 0) + 1
+            _LOGGER.info("KI Vanning: %s går, men hovedventilen er stengt – åpner den", s.navn)
+            self.hass.async_create_task(self.master_pa())
         self._akkumuler()
         self._varsle()
         self.hass.async_create_task(self._skriv_lager())
@@ -670,6 +693,7 @@ class KiVanningMotor:
             return
         """Bygger planen. Kalenderen fra OpenSprinkler-integrasjonen er hovedkilden;
         er adressen fylt ut, hentes den nøyaktige programtabellen fra /jp i tillegg."""
+        self._finn_soner()
         self._finn_programmer()
         await self._plan_fra_kalender()
         vert, passord = self.oppsett.get("host"), self.oppsett.get("passord")

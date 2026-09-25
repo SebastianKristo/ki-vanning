@@ -180,6 +180,35 @@ class OpenSprinkler(Grunnlag):
         await self.hass.async_block_till_done()
         self.assertEqual(self.hass.states.get("switch.hovedventil").state, "on")
 
+    async def test_soner_som_dukker_opp_etter_oppstart(self):
+        """OpenSprinkler lastet etter KI Vanning: ingen soner ved oppstart. Når de dukker
+        opp og planen hentes på nytt, skal en sone som starter likevel åpne hovedventilen."""
+        self.hass.states.async_set("switch.hovedventil", "off")
+        m = KiVanningMotor(self.hass, {"modus": "opensprinkler", "prefiks": P,
+                                       "master_ventil": "switch.hovedventil"})
+        await m.start()
+        self.motorer.append(m)
+        self.assertEqual(len(m.soner), 0)
+        self.hass.states.async_set(f"switch.{P}_s01_garasje_roser_station_enabled", "on",
+                                   {"friendly_name": "OpenSprinkler S01 Garasje/Roser Station Enabled"})
+        self.hass.states.async_set(f"binary_sensor.{P}_s01_garasje_roser_station_running", "off")
+        await m._hent_plan(None)
+        self.assertEqual(m.soner[1].navn, "Garasje/Roser", "enhetsnavnet foran skal bort")
+        self.hass.states.async_set(f"binary_sensor.{P}_s01_garasje_roser_station_running", "on")
+        await self.hass.async_block_till_done()
+        self.assertEqual(self.hass.states.get("switch.hovedventil").state, "on")
+
+    async def test_tikket_apner_hovedventilen_om_hendelsen_ble_borte(self):
+        self.hass.states.async_set(f"switch.{P}_s01_plen_station_enabled", "on", {"friendly_name": "S01 Plen Station Enabled"})
+        self.hass.states.async_set(f"binary_sensor.{P}_s01_plen_station_running", "on")   # går allerede
+        self.hass.states.async_set("switch.hovedventil", "off")
+        m = KiVanningMotor(self.hass, {"modus": "opensprinkler", "prefiks": P, "master_ventil": "switch.hovedventil"})
+        await m.start()
+        self.motorer.append(m)
+        m._tikk(None)
+        await self.hass.async_block_till_done()
+        self.assertEqual(self.hass.states.get("switch.hovedventil").state, "on")
+
 
 if __name__ == "__main__":
     unittest.main()
